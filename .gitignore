@@ -1,0 +1,14 @@
+# Python virtual environment (recreated by JARVIS.bat)
+venv/
+__pycache__/
+*.pyc
+
+# Runtime logs
+*.log
+
+# Real secrets and personal data - never commit these
+backend/telephony_config.json
+backend/config.json
+backend/phonebook.json
+backend/memory/
+backend/security/
