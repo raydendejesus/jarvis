@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Jarvis Browser Control",
+  "version": "1.0.0",
+  "description": "Lets your local Jarvis assistant see and act in whatever browser tab you're currently viewing, through its own on-screen cursor - never your real mouse, and only when you ask it to.",
+  "permissions": ["scripting", "storage", "tabs", "debugger", "alarms"],
+  "host_permissions": ["http://127.0.0.1:8765/*", "<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Jarvis Browser Control"
+  }
+}

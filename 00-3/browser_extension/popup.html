@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { font-family: system-ui, sans-serif; width: 270px; padding: 12px; background: #0b1418; color: #cfe8f0; }
+  h1 { font-size: 14px; margin: 0 0 10px; color: #4de3ff; }
+  .row { margin: 10px 0; font-size: 12px; }
+  .status { font-size: 11px; color: #6f8894; line-height: 1.4; }
+  label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Jarvis Browser Control</h1>
+  <p class="row">Jarvis acts on whichever tab you're currently viewing, the moment you ask him to - no per-tab setup needed.</p>
+  <div class="row">
+    <label><input type="checkbox" id="pauseToggle" /> Pause Jarvis (blocks every browser action, regardless of anything else)</label>
+  </div>
+  <p class="status">
+    This popup doesn't send Jarvis any instructions - it only controls whether he's
+    allowed to act at all. He still only ever does something here when you ask him to
+    in normal conversation, and the dashboard's Browser Control toggle must also be on.
+  </p>
+  <script src="popup.js"></script>
+</body>
+</html>

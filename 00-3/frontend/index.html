@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jarvis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="clock" id="clock">--:--:--</div>
+
+  <div class="layout">
+  <aside class="phonebook-area" id="phoneBookPanel">
+    <h2 class="side-heading">Phone Book <span id="pbCount" class="side-count"></span></h2>
+    <form id="phoneBookForm" class="phonebook-form">
+      <label class="field-line">
+        <span class="field-label">name:</span>
+        <input type="text" id="pbName" required />
+      </label>
+      <label class="field-line">
+        <span class="field-label">number:</span>
+        <input type="tel" id="pbNumber" placeholder="+1 555 123 4567" required />
+      </label>
+      <button type="submit" class="hud-btn">Add</button>
+    </form>
+    <ul id="phoneBookList" class="phonebook-list"></ul>
+    <p class="hint-text">
+      Say "Jarvis, call &lt;name&gt;" to have Jarvis place a call to a saved contact.
+      Only numbers listed here (or ones you say directly) can be called - Jarvis
+      won't dial anyone not named here or given explicitly.
+    </p>
+  </aside>
+
+  <main>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div class="status-strip">
+      <span class="indicator" id="ind-ai_enabled" data-label="AI">AI</span>
+      <span class="indicator" id="ind-screen_access" data-label="SCR">SCR</span>
+      <span class="indicator" id="ind-camera_access" data-label="CAM">CAM</span>
+      <span class="indicator" id="ind-desk_guard_enabled" data-label="GRD">GRD</span>
+      <span class="indicator" id="ind-calling_enabled" data-label="CALL">CALL</span>
+      <span class="indicator" id="ind-call_notifications_enabled" data-label="NOTIFY">NOTIFY</span>
+      <span class="indicator" id="ind-location_mode" data-label="LOC">LOC: OFF</span>
+      <span class="indicator" id="ind-browser_control_enabled" data-label="BRWS">BRWS</span>
+    </div>
+
+    <h1 class="brand">J.A.R.V.I.S.</h1>
+
+    <div id="core" class="core">
+      <div class="ring ring-dashed"></div>
+      <div class="ring ring2"></div>
+      <div class="ring ring3 ring-dashed"></div>
+    </div>
+    <div id="status">Initializing...</div>
+    <div id="log"></div>
+
+    <div class="controls">
+      <label class="hud-btn">
+        Attach photo / video
+        <input type="file" id="fileInput" accept="image/*,video/*" hidden />
+      </label>
+      <button id="enrollBtn" class="hud-btn" type="button">Enroll my face</button>
+      <span id="enrollResult" class="hint-text"></span>
+    </div>
+
+    <details class="hud-panel">
+      <summary>Settings</summary>
+      <label class="switch-row"><span>Jarvis enabled</span><input type="checkbox" id="toggle-ai_enabled" /><span class="switch"></span></label>
+      <label class="switch-row"><span>Also listen via this tab's mic</span><input type="checkbox" id="toggle-dashboard-mic" /><span class="switch"></span></label>
+      <p class="hint-text">Off by default - the always-on background listener already hears you, so leaving both on can make Jarvis answer twice from two slightly different transcriptions of the same thing.</p>
+      <label class="switch-row"><span>Screen access</span><input type="checkbox" id="toggle-screen_access" /><span class="switch"></span></label>
+      <label class="switch-row"><span>Camera access</span><input type="checkbox" id="toggle-camera_access" /><span class="switch"></span></label>
+      <label class="switch-row"><span>Desk Guard</span><input type="checkbox" id="toggle-desk_guard_enabled" /><span class="switch"></span></label>
+      <label class="switch-row"><span>Calling</span><input type="checkbox" id="toggle-calling_enabled" /><span class="switch"></span></label>
+      <label class="switch-row"><span>Unanswered-call notifications</span><input type="checkbox" id="toggle-call_notifications_enabled" /><span class="switch"></span></label>
+      <button type="button" id="toggle-location_mode" class="hud-btn location-cycle-btn">Location: OFF (click to change)</button>
+      <p class="hint-text">Click cycles OFF &rarr; PC &rarr; PHONE &rarr; OFF. Only the device matching the current mode shares its position.</p>
+      <label class="switch-row"><span>Browser control</span><input type="checkbox" id="toggle-browser_control_enabled" /><span class="switch"></span></label>
+      <label class="switch-row"><span>&nbsp;&nbsp;&rarr; allow direct screen-control fallback</span><input type="checkbox" id="toggle-browser_pixel_fallback_enabled" /><span class="switch"></span></label>
+      <p class="hint-text">
+        Browser control lets Jarvis click and type in your active browser tab through his own
+        on-screen cursor when you ask him to - it never touches your real mouse. The fallback
+        below it takes direct pixel-level control for pages it can't otherwise read, and always
+        shows an on-screen warning you must approve first.
+      </p>
+      <p id="settingsError" class="hint-text error"></p>
+    </details>
+
+    <details class="hud-panel" id="audioPanel">
+      <summary>Audio I/O</summary>
+      <label class="field-row">
+        <span>Microphone</span>
+        <select id="micSelect"></select>
+      </label>
+      <div class="level-meter"><div id="levelBar" class="level-fill"></div></div>
+      <label class="field-row">
+        <span>Speaker output</span>
+        <select id="speakerSelect"></select>
+      </label>
+      <p class="hint-text">
+        Speaker output is fully switchable here. The microphone used for wake-word
+        listening always follows Windows' default recording device - this panel lets
+        you preview a mic's input level, but to actually change which one Jarvis
+        listens through, set it as default in Windows Sound settings.
+      </p>
+    </details>
+  </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
