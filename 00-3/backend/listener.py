@@ -97,6 +97,15 @@ def _drain_queue() -> None:
             break
 
 
+def _is_sleep_command(lower: str) -> bool:
+    # A minor transcription slip (one wrong or missing word) is common enough
+    # that requiring the exact phrase "night jarvis" made this fail silently
+    # whenever the mic misheard even slightly - checking for both words
+    # appearing anywhere, rather than as one exact substring, is far more
+    # forgiving while still being clearly intentional rather than accidental.
+    return "night" in lower and WAKE_WORD in lower
+
+
 def _extract_command(transcript: str) -> str | None:
     lower = transcript.lower()
     idx = lower.find(WAKE_WORD)
@@ -182,11 +191,15 @@ def _handle_utterance_inner(audio: np.ndarray) -> None:
     lower = transcript.lower()
 
     if now < _awake_until:
-        if "night jarvis" in lower:
+        if _is_sleep_command(lower):
             _awake_until = 0.0
             print("[listener] back to sleep", flush=True)
             return
         command = transcript.strip()
+    elif _is_sleep_command(lower):
+        # Already asleep - "night jarvis" said again is a harmless no-op,
+        # not a command to pass along.
+        return
     else:
         command = _extract_command(transcript)
         if command is None:

@@ -168,7 +168,7 @@ function initRecognition() {
     const transcript = last[0].transcript;
     const lower = transcript.toLowerCase();
 
-    if (awake && lower.includes("night jarvis")) {
+    if (awake && lower.includes("night") && lower.includes(WAKE_WORD)) {
       setAwake(false);
       log('Back to sleep - say "Jarvis" to wake me again.');
       return;
