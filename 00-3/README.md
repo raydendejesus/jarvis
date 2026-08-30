@@ -330,6 +330,18 @@ Voice: change `VOICE` in `backend/server.py` (default `en-GB-RyanNeural`). Run `
 - **Browser Control is the one deliberate exception to "read-only by default"**: once turned on, it can genuinely click and type in your current tab - submit forms, follow links, anything a real click could do. That's why it needs its own toggle, and why its riskiest fallback path needs a fresh on-screen "Allow" every single time, rather than being always-available like the other tools.
 - Desk Guard's lock action only ever locks; it has no unlock capability.
 
+## Known limitations - what it can't do, and what it might get wrong
+
+Worth reading before you rely on it for something that matters, based on things actually observed while building and testing this version:
+
+- **Browser Control can't touch Chrome's own pages.** The New Tab page, `chrome://` pages, and the Chrome Web Store are hard-blocked from any extension acting on them - not a bug, not fixable, a Chrome security boundary. If it says it can't reach the page, check what tab is actually focused first.
+- **Canvas-drawn pages have no readable structure.** `browser_scan_page` finds nothing on pages built entirely on `<canvas>` (some games, some design tools) - the pixel fallback exists for exactly this, but it's slower and needs its own on-screen approval each time.
+- **Speech recognition isn't perfect.** The native listener occasionally mishears a word, especially with quiet or fast speech - this can make it act on a slightly wrong transcript. If something seems off, just say it again more clearly rather than assuming it's broken.
+- **Tool-calling reliability with a local model is good, not perfect.** Several real bugs were found and fixed while building this version - the model skipping a step it was told to always do, describing a browser action as done when it wasn't, needing a tool's own error message spelled out for it instead of acting on it directly. The persona has explicit rules against these now, and they hold up in testing, but a local 8B model won't have the same consistency as a much larger cloud model on every possible phrasing.
+- **Don't treat a spoken confirmation as proof for anything that actually matters.** For something consequential - a call you need to be certain went through, a form submission you need to be certain happened - verify directly (check your phone, look at the page yourself) rather than taking a confirmation as the last word, the same way you'd double-check anything else that's important enough to matter.
+- **Multi-window Chrome setups are less tested.** Browser Control tracks whichever tab you last switched to; with several separate Chrome windows open at once, which one it considers "current" hasn't been rigorously exercised.
+- **Desk Guard's face matching isn't a security system.** Lighting, glasses, and camera angle can all cause a false lock, or rarely, a false match.
+
 ## License
 
 This project is released under a custom, plain-language **non-commercial** license - see [`LICENSE.md`](LICENSE.md) for the full text. In short: free to use, modify, and share forever; it may never be sold by anyone; and if it's used as the foundation of another project, or makes up 51% or more of one, that project is bound by the same no-selling rule too.
