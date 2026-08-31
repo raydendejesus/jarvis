@@ -17,3 +17,4 @@ backend/plugins_data/
 backend/google_oauth_config.json
 backend/github_oauth_config.json
 backend/connections/
+backend/canvas_state.json

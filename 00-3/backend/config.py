@@ -16,6 +16,7 @@ DEFAULTS = {
     "location_mode": "off",
     "browser_control_enabled": False,
     "browser_pixel_fallback_enabled": False,
+    "code_canvas_enabled": False,
 }
 # A plugin's toggle gets a default the moment its file is dropped into
 # backend/plugins/ - no manual edit here needed.

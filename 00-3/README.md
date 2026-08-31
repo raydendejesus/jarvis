@@ -62,6 +62,8 @@ Typical steady-state use (just talking to it) is **~6-7 GB VRAM**. A moment of l
 - Read or act inside whatever browser tab you're viewing - click, type, scroll, or describe what's on the page - through its own on-screen cursor, only when you ask it to
 - Watch your desk via webcam and lock Windows if it sees a face that isn't yours (opt-in)
 - Keep a phone book and place/receive real phone calls, having an actual spoken conversation over the line
+- Build a real, live website/app preview and show it in a dashboard panel, on request
+- Search/read a connected Gmail, Calendar, Drive, GitHub repo, Discord server, or Notion workspace, or create a Google Slides presentation, once you've connected each
 - Run persistently: starts at Windows login, controllable via a system tray icon or the web dashboard
 
 ## Architecture - how it works
@@ -178,6 +180,14 @@ Unlike the addon above, plugins need zero core-file editing - a single `.py` fil
 
 Plugins are **dashboard/native-listener only, by construction, not by convention**: phone calls use a small fixed tool list (`PHONE_TOOLS_OUTBOUND`/`PHONE_TOOLS_INBOUND`) that never touches `plugin_loader` at all, so there's no way to phone Jarvis and have it invoke a plugin, browser control, or screen/camera access - those all require sitting at the dashboard.
 
+## Code canvas
+
+"Jarvis, build me a website for X" gets you a real, live, working preview - not a description in words. Turn on **Code canvas** in Settings (off by default) and a panel appears on the right side of the dashboard: a genuine white preview pane rendered from the complete HTML/CSS/JS Jarvis writes in one shot each time. There's no partial-update mode - every call passes the entire page, even for a small tweak to something already showing.
+
+The preview renders in a sandboxed `<iframe sandbox="allow-scripts">` - scripts run, so interactive demos actually work, but the generated page has zero access to the dashboard, your cookies, or anything else in your real browser; it's a fully isolated, disposable document each time. The last thing built persists across a page reload and a backend restart (`backend/canvas_state.json`) so it doesn't just vanish, but it's view state, not something saved to memory the way a fact or knowledge-base entry is.
+
+The model's context window was widened from 4096 to 8192 tokens specifically for this - generating a full page as a single tool call needs real headroom, and there's ample VRAM budget for it on any GPU this project already recommends.
+
 ## Connecting external accounts (Google, GitHub, Discord, Notion)
 
 Some plugins need access to an account of yours rather than just a local file. Four ship so far, all **read-only by design** - searching/reading, never sending, creating, or writing, the same "start narrow, expand deliberately" approach used everywhere else in this project. Each gets its own toggle in the dashboard's Plugins panel and its own row in the **Connections** panel.
@@ -289,6 +299,7 @@ Everything beyond basic conversation is off until you turn it on, from the dashb
 | Location | Three-state cycle: OFF → PC → PHONE → OFF |
 | Browser Control | Lets Jarvis act in your current browser tab - see the dedicated section above |
 | &nbsp;&nbsp;→ pixel-control fallback | Only visible once Browser Control is on - see above |
+| Code canvas | Lets Jarvis build and show a real live website/app preview - see the dedicated section above |
 | *(each installed plugin)* | Its own toggle appears automatically in the dashboard's **Plugins** panel and the tray menu - see Plugin system above |
 
 **Desk Guard**: click "Enroll my face" on the dashboard a few times (it captures reference photos over a few seconds each time), then turn the toggle on.

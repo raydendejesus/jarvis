@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import browser_control
+import canvas_state
 import config as config_module
 import discord_auth
 import github_auth
@@ -105,6 +106,8 @@ class ChatResponse(BaseModel):
     reply: str
     audio: str
     mime: str = "audio/mpeg"
+    canvas_html: str | None = None
+    canvas_title: str | None = None
 
 
 class SettingsUpdate(BaseModel):
@@ -118,6 +121,7 @@ class SettingsUpdate(BaseModel):
     location_mode: str | None = None
     browser_control_enabled: bool | None = None
     browser_pixel_fallback_enabled: bool | None = None
+    code_canvas_enabled: bool | None = None
 
 
 async def synthesize(text: str) -> bytes:
@@ -245,10 +249,21 @@ async def chat(req: ChatRequest) -> ChatResponse:
 
     chat_turn_busy = True
     try:
+        canvas_before = canvas_state.get_updated_at()
         reply_text = await run_chat_turn(req.message, cfg)
-        return await _speak(reply_text)
+        response = await _speak(reply_text)
+        if canvas_state.get_updated_at() != canvas_before:
+            canvas = canvas_state.get()
+            response.canvas_html = canvas["html"]
+            response.canvas_title = canvas.get("title") or None
+        return response
     finally:
         chat_turn_busy = False
+
+
+@app.get("/api/canvas")
+async def get_canvas() -> dict:
+    return canvas_state.get()
 
 
 PHONE_MAX_HISTORY = 20
@@ -544,7 +559,7 @@ async def get_settings() -> dict:
     return config_module.load_config()
 
 
-ACCESS_KEYS_AFFECTING_HISTORY = ("screen_access", "camera_access", "calling_enabled", "browser_control_enabled")
+ACCESS_KEYS_AFFECTING_HISTORY = ("screen_access", "camera_access", "calling_enabled", "browser_control_enabled", "code_canvas_enabled")
 VALID_LOCATION_MODES = {"off", "pc", "phone"}
 
 

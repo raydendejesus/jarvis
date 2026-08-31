@@ -44,7 +44,29 @@ function extractCommand(transcript) {
   return after.trim();
 }
 
+function showCanvas(html, title) {
+  const panel = document.getElementById("canvasPanel");
+  const frame = document.getElementById("canvasFrame");
+  const titleEl = document.getElementById("canvasTitle");
+  if (!panel || !frame) return;
+  frame.srcdoc = html;
+  if (titleEl) titleEl.textContent = title ? `- ${title}` : "";
+  panel.hidden = false;
+}
+
+async function loadCanvasOnStartup() {
+  try {
+    const resp = await fetch("/api/canvas");
+    const data = await resp.json();
+    if (data.html) showCanvas(data.html, data.title);
+  } catch (err) {
+    console.error("Failed to load canvas:", err);
+  }
+}
+
 async function playReply(data) {
+  if (data.canvas_html) showCanvas(data.canvas_html, data.canvas_title);
+
   if (!data.reply || !data.audio) {
     // Jarvis is switched off - stay properly silent, not even a spoken
     // acknowledgment, and just resume listening for when it's turned back on.
@@ -209,7 +231,7 @@ function initRecognition() {
   }
 }
 
-const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled"];
+const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled"];
 
 function setIndicator(key, active) {
   const el = document.getElementById(`ind-${key}`);
@@ -698,6 +720,7 @@ initAudioPanel();
 initPhoneBookPanel();
 loadPlugins();
 loadConnections();
+loadCanvasOnStartup();
 checkConnectionRedirectResult();
 tickClock();
 setInterval(tickClock, 1000);

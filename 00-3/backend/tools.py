@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from ddgs import DDGS
 
 import browser_control
+import canvas_state
 import knowledge
 import location
 import memory
@@ -204,6 +205,30 @@ BROWSER_PIXEL_CLICK_SCHEMA = {
     },
 }
 
+MAX_CANVAS_CHARS = 60_000
+
+CANVAS_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "write_canvas_code",
+        "description": (
+            "Write or update a complete, self-contained HTML page (inline <style>/<script> as needed) "
+            "that renders live on sir's dashboard in a panel next to the conversation - a real working "
+            "preview, not a description in words. Use this whenever sir asks you to build a website, "
+            "app, page, tool, or visual demo. Always pass the ENTIRE page's HTML every time, even for a "
+            "small change to something already showing - there is no partial-update or diff mode."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "html": {"type": "string", "description": "The complete HTML document to render"},
+                "title": {"type": "string", "description": "A short title for what this is, shown above the preview"},
+            },
+            "required": ["html"],
+        },
+    },
+}
+
 CALL_PHONE_SCHEMA = {
     "type": "function",
     "function": {
@@ -251,6 +276,8 @@ def available_schemas(config: dict) -> list[dict]:
         schemas.extend([BROWSER_SCAN_SCHEMA, BROWSER_READ_SCHEMA, BROWSER_CLICK_SCHEMA, BROWSER_TYPE_SCHEMA, BROWSER_SCROLL_SCHEMA])
         if config.get("browser_pixel_fallback_enabled"):
             schemas.append(BROWSER_PIXEL_CLICK_SCHEMA)
+    if config.get("code_canvas_enabled"):
+        schemas.append(CANVAS_SCHEMA)
     schemas.extend(plugin_loader.available_schemas(config))
     return schemas
 
@@ -507,6 +534,17 @@ async def browser_click_by_sight(description: str) -> str:
     return f"Clicked on '{description}' using direct screen control, after sir approved the on-screen warning."
 
 
+async def write_canvas_code(args: dict) -> str:
+    html = (args.get("html") or "").strip()
+    if not html:
+        return "I need actual HTML content to show on the canvas."
+    if len(html) > MAX_CANVAS_CHARS:
+        return f"That's too large ({len(html)} characters, max {MAX_CANVAS_CHARS}) - trim it down and try again."
+    title = (args.get("title") or "").strip()
+    canvas_state.set_content(html, title)
+    return f"Updated the canvas{f' - {title}' if title else ''}. Sir can see it live on the dashboard now."
+
+
 async def call_phone_number(name_or_number: str, message: str = "") -> str:
     cfg = telephony.load_config()
     if cfg is None:
@@ -562,6 +600,7 @@ DISPATCH = {
     "browser_type": lambda args: browser_type(args["target_id"], args["text"]),
     "browser_scroll": lambda args: browser_scroll(args["direction"]),
     "browser_click_by_sight": lambda args: browser_click_by_sight(args["description"]),
+    "write_canvas_code": write_canvas_code,
 }
 
 

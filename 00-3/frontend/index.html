@@ -49,6 +49,7 @@
       <span class="indicator" id="ind-call_notifications_enabled" data-label="NOTIFY">NOTIFY</span>
       <span class="indicator" id="ind-location_mode" data-label="LOC">LOC: OFF</span>
       <span class="indicator" id="ind-browser_control_enabled" data-label="BRWS">BRWS</span>
+      <span class="indicator" id="ind-code_canvas_enabled" data-label="CODE">CODE</span>
     </div>
 
     <h1 class="brand">J.A.R.V.I.S.</h1>
@@ -90,6 +91,11 @@
         below it takes direct pixel-level control for pages it can't otherwise read, and always
         shows an on-screen warning you must approve first.
       </p>
+      <label class="switch-row"><span>Code canvas</span><input type="checkbox" id="toggle-code_canvas_enabled" /><span class="switch"></span></label>
+      <p class="hint-text">
+        Lets Jarvis build a real, live website/app/demo and show it in a preview panel when you
+        ask - "build me a website for X." Rendered sandboxed, with no access to this dashboard.
+      </p>
       <p id="settingsError" class="hint-text error"></p>
     </details>
 
@@ -125,6 +131,17 @@
       </p>
     </details>
   </main>
+
+  <aside class="canvas-area" id="canvasPanel" hidden>
+    <h2 class="side-heading">Canvas <span id="canvasTitle" class="side-count"></span></h2>
+    <div class="canvas-frame-wrap">
+      <iframe id="canvasFrame" sandbox="allow-scripts" title="Jarvis canvas preview"></iframe>
+    </div>
+    <p class="hint-text">
+      Live preview of a page Jarvis builds when asked to make a website, app, or visual demo -
+      sandboxed, no access to this dashboard or your real browser.
+    </p>
+  </aside>
   </div>
   <script src="app.js"></script>
 </body>
