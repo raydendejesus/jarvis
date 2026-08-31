@@ -184,17 +184,19 @@ Some plugins need access to an account of yours rather than just a local file. F
 
 Not every service uses the same connection mechanism, on purpose - a real OAuth-click flow where the service supports one (Google, GitHub), a pasted token where that's how the service is actually meant to be used for a personal tool (Discord's bot model, Notion's internal-integration model). Forcing a fake uniform "connect" story across services that don't work the same way underneath would mean lying about how it actually works; each is documented for what it really is instead.
 
-### Google (Gmail search, Calendar lookup, Drive search)
+### Google (Gmail search, Calendar lookup, Drive search, Slides creation)
 
 **One-time setup in your own Google Cloud project** (can't be done on your behalf):
 
-1. [console.cloud.google.com](https://console.cloud.google.com) → new project → **APIs & Services → Library** → enable Gmail API, Google Calendar API, Google Drive API.
+1. [console.cloud.google.com](https://console.cloud.google.com) → new project → **APIs & Services → Library** → enable Gmail API, Google Calendar API, Google Drive API, and **Google Slides API**.
 2. **APIs & Services → OAuth consent screen** → External → fill in an app name → leave it in **Testing** status → add your own Google account under **Test users**.
 3. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → Web application → Authorized redirect URI: `http://127.0.0.1:8765/api/connections/google/callback` → copy the Client ID and Client secret.
 4. Copy `backend/google_oauth_config.example.json` to `backend/google_oauth_config.json`, paste in those two values, restart the backend.
-5. Turn on the **Google Workspace** plugin toggle, then click **Connect Google** in the Connections panel and sign in - you'll see Google's real sign-in page, review the (read-only) permissions, and approve.
+5. Turn on the **Google Workspace** plugin toggle, then click **Connect Google** in the Connections panel and sign in - you'll see Google's real sign-in page, review the permissions, and approve.
 
-From then on: "Jarvis, search my Gmail for invoices," "what's on my calendar this week," "find that file in Drive."
+From then on: "Jarvis, search my Gmail for invoices," "what's on my calendar this week," "find that file in Drive," "make me a slideshow about X."
+
+Gmail/Calendar/Drive stay read-only - Slides is the one deliberate exception, since creating a presentation is genuinely the point and is low-consequence (nothing sent to anyone, trivially edited or deleted afterward) compared to sending an email or writing an arbitrary file. It returns a real, working link every time so you can verify it yourself rather than just trusting a spoken "done."
 
 ### GitHub (list issues, pull requests, recent commits)
 

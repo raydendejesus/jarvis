@@ -20,13 +20,18 @@ TOKENS_FILE = Path(__file__).resolve().parent / "connections" / "google_tokens.j
 
 REDIRECT_URI = "http://127.0.0.1:8765/api/connections/google/callback"
 
-# Read-only, deliberately - sending email, creating calendar events, and
-# writing to Drive are real-world actions with real consequences, left for a
-# follow-up once the connection itself is proven solid, not bundled in here.
+# Gmail/Calendar/Drive stay read-only, deliberately - sending email, creating
+# calendar events, and writing arbitrary Drive files are real-world actions
+# with real consequences, left for a follow-up once the connection itself is
+# proven solid. Slides is the one deliberate exception: creating a
+# presentation is genuinely low-consequence (nothing sent to anyone, trivial
+# to edit or delete afterward) and "making a slideshow" was the actual ask,
+# so it gets write access while the rest stays read-only.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/presentations",
 ]
 
 AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"

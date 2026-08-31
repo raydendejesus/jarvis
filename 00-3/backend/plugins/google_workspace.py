@@ -1,9 +1,10 @@
 """
-Read-only Gmail search, Calendar lookup, and Drive search, once sir has
-connected his Google account from the dashboard's Connections panel (a real
-OAuth "Sign in with Google" flow - see google_auth.py). This plugin only
-ever reads; sending email, creating events, and writing to Drive are
-deliberately not included yet.
+Read-only Gmail search, Calendar lookup, and Drive search, plus one write
+capability - creating Google Slides presentations - once sir has connected
+his Google account from the dashboard's Connections panel (a real OAuth
+"Sign in with Google" flow - see google_auth.py). Everything except Slides
+creation only ever reads; sending email, creating calendar events, and
+writing arbitrary Drive files are deliberately not included yet.
 """
 from datetime import datetime, timedelta
 
@@ -12,7 +13,7 @@ import httpx
 import google_auth
 
 PLUGIN_NAME = "google_workspace"
-TOGGLE_LABEL = "Google Workspace (Gmail / Calendar / Drive)"
+TOGGLE_LABEL = "Google Workspace (Gmail / Calendar / Drive / Slides)"
 CONFIG_KEY = "google_workspace_enabled"
 ENABLED_BY_DEFAULT = False
 
@@ -151,6 +152,75 @@ async def search_drive_files(args: dict) -> str:
     return f"Found {len(files)} Drive file(s) matching '{query}':\n" + "\n".join(lines)
 
 
+async def create_google_slides(args: dict) -> str:
+    headers = await _auth_headers()
+    if headers is None:
+        return NOT_CONNECTED_MSG
+
+    title = (args.get("title") or "Untitled Presentation").strip()
+    slides_content = args.get("slides") or []
+    if not slides_content:
+        return "I need at least one slide - a title and some bullet points for it - to build a presentation."
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        create_resp = await client.post(
+            "https://slides.googleapis.com/v1/presentations",
+            headers=headers, json={"title": title},
+        )
+        if create_resp.status_code != 200:
+            return f"Couldn't create the presentation: {create_resp.status_code} {create_resp.text[:200]}"
+        presentation = create_resp.json()
+        presentation_id = presentation["presentationId"]
+        default_slide_id = presentation["slides"][0]["objectId"]
+
+        # Replace the auto-created blank first slide with explicitly-built
+        # ones so every slide (including the first) is constructed the same
+        # way, with known placeholder IDs, rather than special-casing it.
+        requests = [{"deleteObject": {"objectId": default_slide_id}}]
+        for i, slide in enumerate(slides_content):
+            title_id, body_id = f"slide_{i}_title", f"slide_{i}_body"
+            requests.append({
+                "createSlide": {
+                    "objectId": f"slide_{i}",
+                    "insertionIndex": i,
+                    "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"},
+                    "placeholderIdMappings": [
+                        {"layoutPlaceholder": {"type": "TITLE"}, "objectId": title_id},
+                        {"layoutPlaceholder": {"type": "BODY"}, "objectId": body_id},
+                    ],
+                }
+            })
+            slide_title = str(slide.get("title") or "").strip()
+            if slide_title:
+                requests.append({"insertText": {"objectId": title_id, "insertionIndex": 0, "text": slide_title}})
+
+            body = slide.get("body") or []
+            body_text = "\n".join(str(line) for line in body) if isinstance(body, list) else str(body).strip()
+            if body_text:
+                requests.append({"insertText": {"objectId": body_id, "insertionIndex": 0, "text": body_text}})
+                if "\n" in body_text:
+                    requests.append({
+                        "createParagraphBullets": {
+                            "objectId": body_id,
+                            "textRange": {"type": "ALL"},
+                            "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
+                        }
+                    })
+
+        update_resp = await client.post(
+            f"https://slides.googleapis.com/v1/presentations/{presentation_id}:batchUpdate",
+            headers=headers, json={"requests": requests},
+        )
+        link = f"https://docs.google.com/presentation/d/{presentation_id}/edit"
+        if update_resp.status_code != 200:
+            return (
+                f"Created the presentation but couldn't fill in the slides: "
+                f"{update_resp.status_code} {update_resp.text[:300]}. The blank presentation is still here: {link}"
+            )
+
+    return f"Created a {len(slides_content)}-slide presentation titled '{title}': {link}"
+
+
 SCHEMAS = [
     {
         "type": "function",
@@ -188,10 +258,45 @@ SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_google_slides",
+            "description": (
+                "Create a new Google Slides presentation with one or more slides, each with a title and "
+                "bullet points. This is the one write/create action among the Google tools - everything "
+                "else is read-only. Returns a real link sir can open to see and edit it."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "The presentation's overall title"},
+                    "slides": {
+                        "type": "array",
+                        "description": "One entry per slide, in order",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string", "description": "This slide's heading"},
+                                "body": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "This slide's bullet points, one string per bullet",
+                                },
+                            },
+                            "required": ["title"],
+                        },
+                    },
+                },
+                "required": ["title", "slides"],
+            },
+        },
+    },
 ]
 
 DISPATCH = {
     "search_gmail": search_gmail,
     "list_calendar_events": list_calendar_events,
     "search_drive_files": search_drive_files,
+    "create_google_slides": create_google_slides,
 }
