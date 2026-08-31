@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 import browser_control
 import config as config_module
+import google_auth
 import location
 import memory
 import phonebook
@@ -609,6 +610,50 @@ async def toggle_plugin(plugin_name: str, update: PluginToggle) -> dict:
     # about a plugin's old on/off state shouldn't bias the next reply.
     conversation_history.clear()
     return {"ok": True, "name": plugin_name, "enabled": update.enabled}
+
+
+@app.get("/api/connections")
+async def list_connections() -> list[dict]:
+    return [{
+        "name": "google",
+        "label": "Google (Gmail / Calendar / Drive)",
+        "configured": google_auth.is_configured(),
+        "connected": google_auth.is_connected(),
+    }]
+
+
+@app.get("/api/connections/google/start")
+async def google_connect_start() -> Response:
+    from fastapi.responses import RedirectResponse
+    url = google_auth.build_auth_url()
+    if url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Google OAuth isn't configured yet - see backend/google_oauth_config.example.json.",
+        )
+    return RedirectResponse(url)
+
+
+@app.get("/api/connections/google/callback")
+async def google_connect_callback(request: Request) -> Response:
+    from fastapi.responses import RedirectResponse
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"/?google_connect=error&detail={error}")
+    if not code:
+        return RedirectResponse("/?google_connect=error&detail=no_code")
+    try:
+        await google_auth.exchange_code(code)
+    except Exception as exc:  # noqa: BLE001 - surface to the dashboard, not a raw 500
+        return RedirectResponse(f"/?google_connect=error&detail={exc}")
+    return RedirectResponse("/?google_connect=success")
+
+
+@app.post("/api/connections/google/disconnect")
+async def google_disconnect() -> dict:
+    google_auth.disconnect()
+    return {"ok": True}
 
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

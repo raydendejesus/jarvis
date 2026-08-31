@@ -588,6 +588,59 @@ async function loadPlugins() {
   }
 }
 
+async function loadConnections() {
+  const listEl = document.getElementById("connectionsList");
+  if (!listEl) return;
+  try {
+    const resp = await fetch("/api/connections");
+    const connections = await resp.json();
+    listEl.innerHTML = "";
+    for (const conn of connections) {
+      const row = document.createElement("div");
+      row.className = "field-row";
+      const label = document.createElement("span");
+      label.textContent = conn.label;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "hud-btn";
+      if (!conn.configured) {
+        btn.textContent = "Not set up (see README)";
+        btn.disabled = true;
+      } else if (conn.connected) {
+        btn.textContent = "Connected ✓ (Disconnect)";
+        btn.addEventListener("click", async () => {
+          await fetch(`/api/connections/${conn.name}/disconnect`, { method: "POST" });
+          loadConnections();
+        });
+      } else {
+        btn.textContent = "Connect " + conn.label.split(" (")[0];
+        btn.addEventListener("click", () => {
+          window.location.href = `/api/connections/${conn.name}/start`;
+        });
+      }
+      row.append(label, btn);
+      listEl.appendChild(row);
+    }
+  } catch (err) {
+    console.error("Failed to load connections:", err);
+  }
+}
+
+function checkConnectionRedirectResult() {
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get("google_connect");
+  if (!result) return;
+  const msgEl = document.getElementById("connectionsStatusMsg");
+  if (msgEl) {
+    msgEl.textContent = result === "success"
+      ? "Google account connected."
+      : `Google connection failed: ${params.get("detail") || "unknown error"}`;
+  }
+  const pluginsPanel = document.getElementById("connectionsPanel");
+  if (pluginsPanel) pluginsPanel.open = true;
+  window.history.replaceState({}, "", window.location.pathname);
+}
+
 initRecognition();
 initDashboardMicToggle();
 initSettingsPanel();
@@ -596,5 +649,7 @@ initEnrollButton();
 initAudioPanel();
 initPhoneBookPanel();
 loadPlugins();
+loadConnections();
+checkConnectionRedirectResult();
 tickClock();
 setInterval(tickClock, 1000);

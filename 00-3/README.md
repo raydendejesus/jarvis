@@ -178,6 +178,35 @@ Unlike the addon above, plugins need zero core-file editing - a single `.py` fil
 
 Plugins are **dashboard/native-listener only, by construction, not by convention**: phone calls use a small fixed tool list (`PHONE_TOOLS_OUTBOUND`/`PHONE_TOOLS_INBOUND`) that never touches `plugin_loader` at all, so there's no way to phone Jarvis and have it invoke a plugin, browser control, or screen/camera access - those all require sitting at the dashboard.
 
+## Connecting external accounts (Google, and others later)
+
+Some plugins need access to an account of yours rather than just a local file - the `google_workspace` plugin (Gmail search, Calendar lookup, Drive search, all read-only) is the first example. Rather than pasting an API key into a config file, this uses a real "Connect Google Account" flow: click a button on the dashboard, sign in with Google in your browser, grant access, done - the same shape as the "connect an app" flow you've seen on other sites, not a manual credentials-file edit.
+
+**What you need to do first, one time, in your own Google account** (this can't be skipped or done on your behalf - it has to be your own Google Cloud project):
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), create a new project (or reuse one) - no cost for what this needs.
+2. **APIs & Services → Library**: search for and enable each of the **Gmail API**, **Google Calendar API**, and **Google Drive API**.
+3. **APIs & Services → OAuth consent screen**: choose **External** user type, fill in an app name (e.g. "Jarvis"), your email as the support/developer contact. You do not need to submit this for Google's verification - leave it in **Testing** status.
+4. Still on that screen, under **Test users**, add your own Google account's email address - apps in Testing status only work for accounts explicitly listed here.
+5. **APIs & Services → Credentials → Create Credentials → OAuth client ID**: Application type **Web application**, name it anything, and under **Authorized redirect URIs** add exactly:
+   ```
+   http://127.0.0.1:8765/api/connections/google/callback
+   ```
+6. Click Create. Copy the **Client ID** and **Client secret** it shows you.
+
+**Then, in this project:**
+
+7. Copy `backend/google_oauth_config.example.json` to `backend/google_oauth_config.json` and paste in the client ID and secret from step 6.
+8. Restart the backend.
+9. Turn on the **Google Workspace** plugin toggle (dashboard Settings/Plugins panel or tray menu).
+10. Open the dashboard's **Connections** panel and click **Connect Google**. You'll be sent to Google's real sign-in page, choose your account, review the (read-only) permissions being asked for, and approve. You're redirected straight back to the dashboard, now showing "Connected ✓."
+
+From then on: "Jarvis, search my Gmail for invoices," "what's on my calendar this week," "find that file in Drive." If it isn't connected yet, it says so plainly rather than pretending - see the anti-fabrication rule in the persona section above.
+
+**Why read-only, for now:** sending an email, creating a calendar event, or writing to Drive are real-world actions with real consequences, in a way that searching/reading isn't - the same "start narrow, expand deliberately" approach used everywhere else in this project. Nothing about the framework here prevents adding write scopes later; it's a deliberate choice to prove the connection is solid first.
+
+**Disconnecting**: click "Disconnect" in the Connections panel at any time - this deletes the stored tokens (`backend/connections/google_tokens.json`) immediately; nothing needs to be undone on Google's side unless you also want to revoke access from your [Google Account permissions page](https://myaccount.google.com/permissions).
+
 ## Why it's built this way
 
 - **Local-first**: the LLM, vision, memory, knowledge base, and face recognition all run on your own machine. The only things that ever leave it are: (a) browser-tab speech recognition, if you turn that on, (b) `edge-tts`'s network call to synthesize voice output, and (c) phone call audio, which is inherent to how phone calls work at all.
