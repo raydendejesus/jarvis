@@ -15,4 +15,5 @@ backend/security/
 backend/knowledge/
 backend/plugins_data/
 backend/google_oauth_config.json
+backend/github_oauth_config.json
 backend/connections/

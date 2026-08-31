@@ -588,6 +588,11 @@ async function loadPlugins() {
   }
 }
 
+const TOKEN_FIELD_BY_SERVICE = {
+  discord: { field: "bot_token", placeholder: "Bot token" },
+  notion: { field: "integration_secret", placeholder: "Integration secret" },
+};
+
 async function loadConnections() {
   const listEl = document.getElementById("connectionsList");
   if (!listEl) return;
@@ -597,29 +602,70 @@ async function loadConnections() {
     listEl.innerHTML = "";
     for (const conn of connections) {
       const row = document.createElement("div");
-      row.className = "field-row";
+      row.className = "connection-row";
+
       const label = document.createElement("span");
       label.textContent = conn.label;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "hud-btn";
-      if (!conn.configured) {
-        btn.textContent = "Not set up (see README)";
-        btn.disabled = true;
-      } else if (conn.connected) {
+      row.appendChild(label);
+
+      if (conn.connected) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "hud-btn";
         btn.textContent = "Connected ✓ (Disconnect)";
         btn.addEventListener("click", async () => {
           await fetch(`/api/connections/${conn.name}/disconnect`, { method: "POST" });
           loadConnections();
         });
-      } else {
-        btn.textContent = "Connect " + conn.label.split(" (")[0];
-        btn.addEventListener("click", () => {
-          window.location.href = `/api/connections/${conn.name}/start`;
+        row.appendChild(btn);
+      } else if (conn.auth_style === "oauth") {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "hud-btn";
+        if (!conn.configured) {
+          btn.textContent = "Not set up (see README)";
+          btn.disabled = true;
+        } else {
+          btn.textContent = "Connect " + conn.label.split(" (")[0];
+          btn.addEventListener("click", () => {
+            window.location.href = `/api/connections/${conn.name}/start`;
+          });
+        }
+        row.appendChild(btn);
+      } else if (conn.auth_style === "token") {
+        const spec = TOKEN_FIELD_BY_SERVICE[conn.name];
+        const input = document.createElement("input");
+        input.type = "password";
+        input.placeholder = spec ? spec.placeholder : "Token";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "hud-btn";
+        btn.textContent = "Save";
+        btn.addEventListener("click", async () => {
+          if (!input.value.trim()) return;
+          await fetch(`/api/connections/${conn.name}/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [spec.field]: input.value.trim() }),
+          });
+          loadConnections();
         });
+        row.append(input, btn);
       }
-      row.append(label, btn);
+
       listEl.appendChild(row);
+
+      if (conn.name === "discord" && conn.invite_url) {
+        const inviteP = document.createElement("p");
+        inviteP.className = "hint-text";
+        const a = document.createElement("a");
+        a.href = conn.invite_url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.textContent = "Invite the bot to a server";
+        inviteP.appendChild(a);
+        listEl.appendChild(inviteP);
+      }
     }
   } catch (err) {
     console.error("Failed to load connections:", err);
@@ -628,16 +674,18 @@ async function loadConnections() {
 
 function checkConnectionRedirectResult() {
   const params = new URLSearchParams(window.location.search);
-  const result = params.get("google_connect");
-  if (!result) return;
+  const service = params.get("google_connect") !== null ? "google"
+    : params.get("github_connect") !== null ? "github" : null;
+  if (!service) return;
+  const result = params.get(`${service}_connect`);
   const msgEl = document.getElementById("connectionsStatusMsg");
   if (msgEl) {
     msgEl.textContent = result === "success"
-      ? "Google account connected."
-      : `Google connection failed: ${params.get("detail") || "unknown error"}`;
+      ? `${service[0].toUpperCase()}${service.slice(1)} account connected.`
+      : `${service[0].toUpperCase()}${service.slice(1)} connection failed: ${params.get("detail") || "unknown error"}`;
   }
-  const pluginsPanel = document.getElementById("connectionsPanel");
-  if (pluginsPanel) pluginsPanel.open = true;
+  const connectionsPanel = document.getElementById("connectionsPanel");
+  if (connectionsPanel) connectionsPanel.open = true;
   window.history.replaceState({}, "", window.location.pathname);
 }
 

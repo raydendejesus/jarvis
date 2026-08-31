@@ -14,9 +14,12 @@ from pydantic import BaseModel
 
 import browser_control
 import config as config_module
+import discord_auth
+import github_auth
 import google_auth
 import location
 import memory
+import notion_auth
 import phonebook
 import plugin_loader
 import security
@@ -614,12 +617,37 @@ async def toggle_plugin(plugin_name: str, update: PluginToggle) -> dict:
 
 @app.get("/api/connections")
 async def list_connections() -> list[dict]:
-    return [{
-        "name": "google",
-        "label": "Google (Gmail / Calendar / Drive)",
-        "configured": google_auth.is_configured(),
-        "connected": google_auth.is_connected(),
-    }]
+    return [
+        {
+            "name": "google",
+            "label": "Google (Gmail / Calendar / Drive)",
+            "auth_style": "oauth",
+            "configured": google_auth.is_configured(),
+            "connected": google_auth.is_connected(),
+        },
+        {
+            "name": "github",
+            "label": "GitHub",
+            "auth_style": "oauth",
+            "configured": github_auth.is_configured(),
+            "connected": github_auth.is_connected(),
+        },
+        {
+            "name": "discord",
+            "label": "Discord",
+            "auth_style": "token",
+            "configured": True,
+            "connected": discord_auth.is_connected(),
+            "invite_url": discord_auth.build_invite_url(),
+        },
+        {
+            "name": "notion",
+            "label": "Notion",
+            "auth_style": "token",
+            "configured": True,
+            "connected": notion_auth.is_connected(),
+        },
+    ]
 
 
 @app.get("/api/connections/google/start")
@@ -653,6 +681,77 @@ async def google_connect_callback(request: Request) -> Response:
 @app.post("/api/connections/google/disconnect")
 async def google_disconnect() -> dict:
     google_auth.disconnect()
+    return {"ok": True}
+
+
+@app.get("/api/connections/github/start")
+async def github_connect_start() -> Response:
+    from fastapi.responses import RedirectResponse
+    url = github_auth.build_auth_url()
+    if url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub OAuth isn't configured yet - see backend/github_oauth_config.example.json.",
+        )
+    return RedirectResponse(url)
+
+
+@app.get("/api/connections/github/callback")
+async def github_connect_callback(request: Request) -> Response:
+    from fastapi.responses import RedirectResponse
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"/?github_connect=error&detail={error}")
+    if not code:
+        return RedirectResponse("/?github_connect=error&detail=no_code")
+    try:
+        await github_auth.exchange_code(code)
+    except Exception as exc:  # noqa: BLE001 - surface to the dashboard, not a raw 500
+        return RedirectResponse(f"/?github_connect=error&detail={exc}")
+    return RedirectResponse("/?github_connect=success")
+
+
+@app.post("/api/connections/github/disconnect")
+async def github_disconnect() -> dict:
+    github_auth.disconnect()
+    return {"ok": True}
+
+
+class DiscordTokenSubmit(BaseModel):
+    bot_token: str
+    client_id: str | None = None
+
+
+@app.post("/api/connections/discord/token")
+async def discord_save_token(update: DiscordTokenSubmit) -> dict:
+    if not update.bot_token.strip():
+        raise HTTPException(status_code=400, detail="Bot token can't be empty.")
+    discord_auth.save_token(update.bot_token.strip(), update.client_id.strip() if update.client_id else None)
+    return {"ok": True}
+
+
+@app.post("/api/connections/discord/disconnect")
+async def discord_disconnect() -> dict:
+    discord_auth.disconnect()
+    return {"ok": True}
+
+
+class NotionTokenSubmit(BaseModel):
+    integration_secret: str
+
+
+@app.post("/api/connections/notion/token")
+async def notion_save_token(update: NotionTokenSubmit) -> dict:
+    if not update.integration_secret.strip():
+        raise HTTPException(status_code=400, detail="Integration secret can't be empty.")
+    notion_auth.save_token(update.integration_secret.strip())
+    return {"ok": True}
+
+
+@app.post("/api/connections/notion/disconnect")
+async def notion_disconnect() -> dict:
+    notion_auth.disconnect()
     return {"ok": True}
 
 

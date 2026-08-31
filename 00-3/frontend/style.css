@@ -501,6 +501,28 @@ body.speaking .core::before {
   margin: 10px 0;
 }
 
+.connection-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  flex-wrap: wrap;
+}
+
+.connection-row span {
+  flex: 1 0 auto;
+  min-width: 140px;
+}
+
+.connection-row input {
+  background: rgba(6, 11, 14, 0.8);
+  color: var(--cyan);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 4px;
+  padding: 4px 8px;
+  min-width: 160px;
+}
+
 .field-row select {
   background: rgba(6, 11, 14, 0.8);
   color: var(--cyan);
