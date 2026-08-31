@@ -538,6 +538,56 @@ function initDashboardMicToggle() {
   el.addEventListener("change", () => setDashboardMic(el.checked));
 }
 
+async function loadPlugins() {
+  const listEl = document.getElementById("pluginsList");
+  const errorEl = document.getElementById("pluginsError");
+  if (!listEl) return;
+  try {
+    const resp = await fetch("/api/plugins");
+    const plugins = await resp.json();
+    if (!plugins.length) {
+      listEl.innerHTML = '<p class="hint-text">No plugins installed - drop one into backend/plugins/.</p>';
+      return;
+    }
+    listEl.innerHTML = "";
+    for (const plugin of plugins) {
+      const row = document.createElement("label");
+      row.className = "switch-row";
+      const span = document.createElement("span");
+      span.textContent = plugin.label + (plugin.always_on ? " (always on)" : "");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = plugin.enabled;
+      input.disabled = plugin.always_on;
+      const switchSpan = document.createElement("span");
+      switchSpan.className = "switch";
+      row.append(span, input, switchSpan);
+      listEl.appendChild(row);
+      if (!plugin.always_on) {
+        input.addEventListener("change", async () => {
+          errorEl.textContent = "";
+          try {
+            const resp = await fetch(`/api/plugins/${encodeURIComponent(plugin.name)}/toggle`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ enabled: input.checked }),
+            });
+            if (!resp.ok) {
+              const data = await resp.json().catch(() => ({}));
+              throw new Error(data.detail || `Server error ${resp.status}`);
+            }
+          } catch (err) {
+            errorEl.textContent = err.message;
+            input.checked = !input.checked;
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Failed to load plugins:", err);
+  }
+}
+
 initRecognition();
 initDashboardMicToggle();
 initSettingsPanel();
@@ -545,5 +595,6 @@ initFileAttach();
 initEnrollButton();
 initAudioPanel();
 initPhoneBookPanel();
+loadPlugins();
 tickClock();
 setInterval(tickClock, 1000);

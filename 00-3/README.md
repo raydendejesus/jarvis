@@ -170,6 +170,14 @@ This repo also includes a separate, **not installed by default**, opt-in addon u
 
 > **Quick summary of the Auto Research DLC**: once installed and turned on, Jarvis spends at most a few extra LLM calls a day (capped, default 3/day) quietly researching things connected to facts it already has about you, so a later question about it is answered instantly. It reuses the same brain model already running - no extra VRAM. Full install steps (which files to copy, exact code to paste into `server.py`/`config.py`, and how to add the toggle) are in [`addons/jarvis-auto-research/README.md`](addons/jarvis-auto-research/README.md).
 
+## Plugin system
+
+Unlike the addon above, plugins need zero core-file editing - a single `.py` file dropped into `backend/plugins/` is the entire install step. Each plugin declares its own tool schema(s), handler(s), and (optionally) a config toggle; `plugin_loader.py` discovers it automatically at startup, the dashboard's new **Plugins** panel and the tray menu both grow a toggle for it on their own, and its default state gets merged into `config.py` without you touching that file either. A plugin that fails to import is skipped with a logged warning rather than breaking the server or any other plugin.
+
+**`billing_tracker.py`** ships as the reference example and a genuinely usable one: log an expense in conversation ("log $12 for lunch") and later ask "how much did I spend last month" for a total and category breakdown. It's a complete, well-commented example of the whole interface - read it before writing your own.
+
+Plugins are **dashboard/native-listener only, by construction, not by convention**: phone calls use a small fixed tool list (`PHONE_TOOLS_OUTBOUND`/`PHONE_TOOLS_INBOUND`) that never touches `plugin_loader` at all, so there's no way to phone Jarvis and have it invoke a plugin, browser control, or screen/camera access - those all require sitting at the dashboard.
+
 ## Why it's built this way
 
 - **Local-first**: the LLM, vision, memory, knowledge base, and face recognition all run on your own machine. The only things that ever leave it are: (a) browser-tab speech recognition, if you turn that on, (b) `edge-tts`'s network call to synthesize voice output, and (c) phone call audio, which is inherent to how phone calls work at all.
@@ -227,6 +235,7 @@ Everything beyond basic conversation is off until you turn it on, from the dashb
 | Location | Three-state cycle: OFF → PC → PHONE → OFF |
 | Browser Control | Lets Jarvis act in your current browser tab - see the dedicated section above |
 | &nbsp;&nbsp;→ pixel-control fallback | Only visible once Browser Control is on - see above |
+| *(each installed plugin)* | Its own toggle appears automatically in the dashboard's **Plugins** panel and the tray menu - see Plugin system above |
 
 **Desk Guard**: click "Enroll my face" on the dashboard a few times (it captures reference photos over a few seconds each time), then turn the toggle on.
 

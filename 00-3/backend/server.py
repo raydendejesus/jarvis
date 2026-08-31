@@ -17,6 +17,7 @@ import config as config_module
 import location
 import memory
 import phonebook
+import plugin_loader
 import security
 import telephony
 import tools
@@ -577,6 +578,37 @@ async def set_settings(update: SettingsUpdate) -> dict:
         await unload_model(vision.VISION_MODEL)
 
     return cfg
+
+
+@app.get("/api/plugins")
+async def list_plugins() -> list[dict]:
+    cfg = config_module.load_config()
+    result = []
+    for meta in plugin_loader.plugin_metadata():
+        enabled = True if meta["always_on"] else bool(cfg.get(meta["config_key"]))
+        result.append({**meta, "enabled": enabled})
+    return result
+
+
+class PluginToggle(BaseModel):
+    enabled: bool
+
+
+@app.post("/api/plugins/{plugin_name}/toggle")
+async def toggle_plugin(plugin_name: str, update: PluginToggle) -> dict:
+    meta = next((m for m in plugin_loader.plugin_metadata() if m["name"] == plugin_name), None)
+    if meta is None:
+        raise HTTPException(status_code=404, detail=f"No plugin named '{plugin_name}'.")
+    if meta["always_on"]:
+        raise HTTPException(status_code=400, detail=f"'{plugin_name}' has no toggle - it's always on.")
+
+    cfg = config_module.load_config()
+    cfg[meta["config_key"]] = update.enabled
+    config_module.save_config(cfg)
+    # Same reasoning as ACCESS_KEYS_AFFECTING_HISTORY above - stale context
+    # about a plugin's old on/off state shouldn't bias the next reply.
+    conversation_history.clear()
+    return {"ok": True, "name": plugin_name, "enabled": update.enabled}
 
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

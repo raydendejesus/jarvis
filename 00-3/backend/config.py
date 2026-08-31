@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import plugin_loader
+
 CONFIG_FILE = Path(__file__).resolve().parent / "config.json"
 
 DEFAULTS = {
@@ -15,6 +17,9 @@ DEFAULTS = {
     "browser_control_enabled": False,
     "browser_pixel_fallback_enabled": False,
 }
+# A plugin's toggle gets a default the moment its file is dropped into
+# backend/plugins/ - no manual edit here needed.
+DEFAULTS.update(plugin_loader.config_defaults())
 
 
 def load_config() -> dict:

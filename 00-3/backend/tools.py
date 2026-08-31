@@ -14,6 +14,7 @@ import knowledge
 import location
 import memory
 import phonebook
+import plugin_loader
 import telephony
 import vision
 
@@ -250,6 +251,7 @@ def available_schemas(config: dict) -> list[dict]:
         schemas.extend([BROWSER_SCAN_SCHEMA, BROWSER_READ_SCHEMA, BROWSER_CLICK_SCHEMA, BROWSER_TYPE_SCHEMA, BROWSER_SCROLL_SCHEMA])
         if config.get("browser_pixel_fallback_enabled"):
             schemas.append(BROWSER_PIXEL_CLICK_SCHEMA)
+    schemas.extend(plugin_loader.available_schemas(config))
     return schemas
 
 
@@ -257,6 +259,12 @@ def available_schemas(config: dict) -> list[dict]:
 # talking to someone who isn't sir should not be able to write "facts about sir"
 # into persistent memory, which previously caused stale/wrong context from one
 # call bleeding into unrelated future conversations.
+#
+# Deliberately built from ALWAYS_ON_SCHEMAS alone, never from available_schemas()
+# or plugin_loader - a phone call must never reach browser control, screen/camera,
+# location, or any plugin (billing, or whatever gets added later). Those stay
+# dashboard/native-listener only, on purpose: someone shouldn't be able to phone
+# Jarvis and have it build them a website or read what's on the desk's screen.
 PHONE_TOOLS_OUTBOUND = [s for s in ALWAYS_ON_SCHEMAS if s["function"]["name"] != "remember"]
 PHONE_TOOLS_INBOUND = ALWAYS_ON_SCHEMAS
 
@@ -558,7 +566,7 @@ DISPATCH = {
 
 
 async def execute_tool(name: str, args: dict) -> str:
-    handler = DISPATCH.get(name)
+    handler = DISPATCH.get(name) or plugin_loader.dispatch_table().get(name)
     if handler is None:
         return f"Unknown tool: {name}"
     try:

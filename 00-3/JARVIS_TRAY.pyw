@@ -15,6 +15,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 import config as config_module  # noqa: E402
 import listener  # noqa: E402
+import plugin_loader  # noqa: E402
 import security  # noqa: E402
 import telephony  # noqa: E402
 
@@ -210,26 +211,32 @@ def main() -> None:
     if cfg.get("ai_enabled"):
         threading.Timer(1.0, open_dashboard).start()
 
-    icon = pystray.Icon(
-        "jarvis",
-        make_icon_image(),
-        "Jarvis",
-        menu=pystray.Menu(
-            pystray.MenuItem("Open Dashboard", open_dashboard),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Jarvis Enabled", toggle_flag("ai_enabled"), checked=flag_checked("ai_enabled")),
-            pystray.MenuItem("Screen Access", toggle_flag("screen_access"), checked=flag_checked("screen_access")),
-            pystray.MenuItem("Camera Access", toggle_flag("camera_access"), checked=flag_checked("camera_access")),
-            pystray.MenuItem("Desk Guard", toggle_flag("desk_guard_enabled"), checked=flag_checked("desk_guard_enabled")),
-            pystray.MenuItem("Calling", toggle_flag("calling_enabled"), checked=flag_checked("calling_enabled")),
-            pystray.MenuItem("Call Notifications", toggle_flag("call_notifications_enabled"), checked=flag_checked("call_notifications_enabled")),
-            pystray.MenuItem(location_mode_label, cycle_location_mode),
-            pystray.MenuItem("Browser Control", toggle_flag("browser_control_enabled"), checked=flag_checked("browser_control_enabled")),
-            pystray.MenuItem("  -> allow pixel-control fallback", toggle_flag("browser_pixel_fallback_enabled"), checked=flag_checked("browser_pixel_fallback_enabled")),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", quit_app),
-        ),
-    )
+    menu_items = [
+        pystray.MenuItem("Open Dashboard", open_dashboard),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Jarvis Enabled", toggle_flag("ai_enabled"), checked=flag_checked("ai_enabled")),
+        pystray.MenuItem("Screen Access", toggle_flag("screen_access"), checked=flag_checked("screen_access")),
+        pystray.MenuItem("Camera Access", toggle_flag("camera_access"), checked=flag_checked("camera_access")),
+        pystray.MenuItem("Desk Guard", toggle_flag("desk_guard_enabled"), checked=flag_checked("desk_guard_enabled")),
+        pystray.MenuItem("Calling", toggle_flag("calling_enabled"), checked=flag_checked("calling_enabled")),
+        pystray.MenuItem("Call Notifications", toggle_flag("call_notifications_enabled"), checked=flag_checked("call_notifications_enabled")),
+        pystray.MenuItem(location_mode_label, cycle_location_mode),
+        pystray.MenuItem("Browser Control", toggle_flag("browser_control_enabled"), checked=flag_checked("browser_control_enabled")),
+        pystray.MenuItem("  -> allow pixel-control fallback", toggle_flag("browser_pixel_fallback_enabled"), checked=flag_checked("browser_pixel_fallback_enabled")),
+    ]
+
+    plugin_toggles = [m for m in plugin_loader.plugin_metadata() if not m["always_on"]]
+    if plugin_toggles:
+        menu_items.append(pystray.Menu.SEPARATOR)
+        for meta in plugin_toggles:
+            menu_items.append(
+                pystray.MenuItem(meta["label"], toggle_flag(meta["config_key"]), checked=flag_checked(meta["config_key"]))
+            )
+
+    menu_items.append(pystray.Menu.SEPARATOR)
+    menu_items.append(pystray.MenuItem("Quit", quit_app))
+
+    icon = pystray.Icon("jarvis", make_icon_image(), "Jarvis", menu=pystray.Menu(*menu_items))
     icon.run()
 
 
