@@ -38,6 +38,16 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 conversation_history: list[dict] = []
 chat_turn_busy = False
 
+# The native background listener (listener.py) runs in a separate process
+# (inside JARVIS_TRAY.pyw, not this server) and talks to the dashboard's own
+# browser tab only through /api/chat - the dashboard has no way to know a
+# native-listener conversation is even happening, so its "thinking"/"speaking"
+# indicator and transcript log went dead the moment the dashboard's own mic
+# became opt-in/off-by-default. listener.py reports its own phase changes
+# here; the dashboard polls it to stay in sync with conversations it isn't
+# actually driving itself.
+listener_status = {"seq": 0, "phase": "idle", "text": ""}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -276,6 +286,23 @@ async def chat(req: ChatRequest) -> ChatResponse:
 @app.get("/api/canvas")
 async def get_canvas() -> dict:
     return canvas_state.get()
+
+
+class ListenerEvent(BaseModel):
+    phase: str
+    text: str = ""
+
+
+@app.post("/api/listener/event")
+async def report_listener_event(ev: ListenerEvent) -> dict:
+    global listener_status
+    listener_status = {"seq": listener_status["seq"] + 1, "phase": ev.phase, "text": ev.text}
+    return {"ok": True}
+
+
+@app.get("/api/listener/event")
+async def get_listener_event() -> dict:
+    return listener_status
 
 
 PHONE_MAX_HISTORY = 20

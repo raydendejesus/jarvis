@@ -54,11 +54,14 @@ function showCanvas(html, title) {
   panel.hidden = false;
 }
 
+let lastSeenCanvasUpdatedAt = null;
+
 async function loadCanvasOnStartup() {
   try {
     const [canvasResp, settingsResp] = await Promise.all([fetch("/api/canvas"), fetch("/api/settings")]);
     const data = await canvasResp.json();
     const settings = await settingsResp.json().catch(() => ({}));
+    lastSeenCanvasUpdatedAt = data.updated_at || null;
     if (data.html) {
       showCanvas(data.html, data.title);
     } else if (settings.code_canvas_enabled) {
@@ -69,6 +72,53 @@ async function loadCanvasOnStartup() {
     }
   } catch (err) {
     console.error("Failed to load canvas:", err);
+  }
+}
+
+// The dashboard only ever checked /api/canvas once, at page load - a canvas
+// built later (e.g. via a spoken request through the native listener, which
+// never touches this tab's own JS at all) never got picked up in an
+// already-open tab. Same underlying gap as the listener-status poller below:
+// re-check periodically instead of only once.
+async function pollCanvasForUpdates() {
+  try {
+    const resp = await fetch("/api/canvas");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.html && data.updated_at && data.updated_at !== lastSeenCanvasUpdatedAt) {
+      lastSeenCanvasUpdatedAt = data.updated_at;
+      showCanvas(data.html, data.title);
+    }
+  } catch (err) {
+    // best-effort background poll - never worth surfacing a network hiccup here
+  }
+}
+
+let lastSeenListenerSeq = 0;
+
+// Mirrors listener.py's phase reports (see server.py's /api/listener/event)
+// so this tab's status circle and transcript log reflect conversations that
+// happened through the always-on background listener, not just ones driven
+// by this tab's own (off-by-default) microphone.
+async function pollListenerStatus() {
+  try {
+    const resp = await fetch("/api/listener/event");
+    if (!resp.ok) return;
+    const ev = await resp.json();
+    if (!ev.seq || ev.seq === lastSeenListenerSeq) return;
+    lastSeenListenerSeq = ev.seq;
+
+    if (ev.phase === "thinking") {
+      log(`You (voice): ${ev.text}`);
+      setState(STATE.THINKING);
+    } else if (ev.phase === "speaking") {
+      log(`Jarvis: ${ev.text}`);
+      setState(STATE.SPEAKING);
+    } else if (ev.phase === "idle" && state !== STATE.LISTENING) {
+      setState(STATE.LISTENING);
+    }
+  } catch (err) {
+    // best-effort background poll - never worth surfacing a network hiccup here
   }
 }
 
@@ -886,3 +936,10 @@ loadCanvasOnStartup();
 checkConnectionRedirectResult();
 tickClock();
 setInterval(tickClock, 1000);
+
+fetch("/api/listener/event")
+  .then((r) => r.json())
+  .then((ev) => { lastSeenListenerSeq = ev.seq || 0; })
+  .catch(() => {});
+setInterval(pollListenerStatus, 800);
+setInterval(pollCanvasForUpdates, 4000);

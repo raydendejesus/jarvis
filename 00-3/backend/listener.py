@@ -33,6 +33,7 @@ MIN_UTTERANCE_SECONDS = 0.4
 AWAKE_WINDOW_SECONDS = 45
 WAKE_WORD = "jarvis"
 CHAT_URL = "http://127.0.0.1:8765/api/chat"
+LISTENER_EVENT_URL = "http://127.0.0.1:8765/api/listener/event"
 
 _whisper_model = None
 _audio_queue: "queue.Queue[np.ndarray]" = queue.Queue()
@@ -169,6 +170,16 @@ def _play_audio(audio_b64: str) -> None:
         Path(tmp_path).unlink(missing_ok=True)
 
 
+def _report_status(phase: str, text: str = "") -> None:
+    """Best-effort only - the dashboard's live status indicator is a nice-to-have,
+    never worth risking the actual listener over if the backend happens to be
+    slow or briefly unreachable."""
+    try:
+        httpx.post(LISTENER_EVENT_URL, json={"phase": phase, "text": text}, timeout=2)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _send_to_jarvis(text: str) -> None:
     try:
         resp = httpx.post(CHAT_URL, json={"message": text}, timeout=120)
@@ -176,12 +187,16 @@ def _send_to_jarvis(text: str) -> None:
         data = resp.json()
     except Exception as exc:  # noqa: BLE001 - keep the listener alive on any request failure
         print(f"[listener] chat request failed: {exc}", flush=True)
+        _report_status("idle")
         return
 
     if not data.get("reply") or not data.get("audio"):
         print("[listener] Jarvis is switched off, staying silent", flush=True)
+        _report_status("idle")
         return
+    _report_status("speaking", data["reply"])
     _play_audio(data["audio"])
+    _report_status("idle")
 
 
 def _handle_utterance(audio: np.ndarray) -> None:
@@ -230,6 +245,7 @@ def _handle_utterance_inner(audio: np.ndarray) -> None:
 
     print(f"[listener] command: {command!r}", flush=True)
     _awake_until = now + AWAKE_WINDOW_SECONDS
+    _report_status("thinking", command)
     _send_to_jarvis(command)
     _drain_queue()
 
