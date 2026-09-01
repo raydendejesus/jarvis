@@ -682,19 +682,35 @@ async function loadConnections() {
           loadConnections();
         });
         row.appendChild(btn);
+      } else if (conn.auth_style === "oauth" && !conn.configured) {
+        const idInput = document.createElement("input");
+        idInput.type = "text";
+        idInput.placeholder = "Client ID";
+        const secretInput = document.createElement("input");
+        secretInput.type = "password";
+        secretInput.placeholder = "Client secret";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "hud-btn";
+        btn.textContent = "Save";
+        btn.addEventListener("click", async () => {
+          if (!idInput.value.trim() || !secretInput.value.trim()) return;
+          const resp = await fetch(`/api/connections/${conn.name}/credentials`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ client_id: idInput.value.trim(), client_secret: secretInput.value.trim() }),
+          });
+          if (resp.ok) loadConnections();
+        });
+        row.append(idInput, secretInput, btn);
       } else if (conn.auth_style === "oauth") {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "hud-btn";
-        if (!conn.configured) {
-          btn.textContent = "Not set up (see README)";
-          btn.disabled = true;
-        } else {
-          btn.textContent = "Connect " + conn.label.split(" (")[0];
-          btn.addEventListener("click", () => {
-            window.location.href = `/api/connections/${conn.name}/start`;
-          });
-        }
+        btn.textContent = "Connect " + conn.label.split(" (")[0];
+        btn.addEventListener("click", () => {
+          window.location.href = `/api/connections/${conn.name}/start`;
+        });
         row.appendChild(btn);
       } else if (conn.auth_style === "token") {
         const spec = TOKEN_FIELD_BY_SERVICE[conn.name];

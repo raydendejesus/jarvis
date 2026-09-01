@@ -120,8 +120,8 @@ A real "Connect Google Account" flow — click a button, sign in, grant access. 
 1. [console.cloud.google.com](https://console.cloud.google.com) → new project → **APIs & Services → Library** → enable Gmail API, Google Calendar API, Google Drive API, and **Google Slides API**.
 2. **APIs & Services → OAuth consent screen** → External → fill in an app name → leave it in **Testing** status → add your own Google account under **Test users**.
 3. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → **Desktop app** (not Web application - this type auto-trusts any `localhost`/`127.0.0.1` address, so there's no redirect URI to type in and get wrong) → name it anything → copy the Client ID and Client secret.
-4. Copy `backend/google_oauth_config.example.json` to `backend/google_oauth_config.json`, paste in those two values, restart the backend.
-5. Turn on the **Google Workspace** plugin toggle, then click **Connect Google** in the Connections panel and sign in.
+4. Turn on the **Google Workspace** plugin toggle, open the dashboard's **Connections** tab, and paste the Client ID and Client secret directly into the Google row's fields, then click **Save** - no file editing needed.
+5. Click **Connect Google** (now showing in that same row) and sign in.
 
 Gmail/Calendar/Drive stay read-only. **Slides is the one deliberate exception** — "Jarvis, make me a slideshow about X" genuinely creates a real, editable Google Slides presentation and hands back a real link. Creating a presentation is low-consequence (nothing sent to anyone, trivially edited or deleted afterward), which is why this one gets write access while the others don't. If you connected Google before this was added, you'll need to click **Connect Google** again — the new scope requires a fresh grant.
 
@@ -131,8 +131,8 @@ Same OAuth-click shape as Google:
 
 1. [github.com/settings/developers](https://github.com/settings/developers) → **OAuth Apps → New OAuth App**. Application name: anything. Homepage URL: `http://127.0.0.1:8765`. Authorization callback URL: `http://127.0.0.1:8765/api/connections/github/callback`.
 2. Register it, then **Generate a new client secret**. Copy the Client ID and the secret.
-3. Copy `backend/github_oauth_config.example.json` to `backend/github_oauth_config.json`, paste in those two values, restart the backend.
-4. Turn on the **GitHub** plugin toggle, then click **Connect GitHub** in the Connections panel and authorize.
+3. Turn on the **GitHub** plugin toggle, open the **Connections** tab, and paste the Client ID and Client secret into the GitHub row's fields, then click **Save** - no file editing needed.
+4. Click **Connect GitHub** (now showing in that same row) and authorize.
 
 Worth knowing: GitHub's classic OAuth App scopes don't cleanly split read from write for private repos — the `repo` scope this requests technically permits more than reading. Jarvis's own tools only ever read (list issues/PRs/commits, nothing that creates or modifies), regardless of what the underlying token could do.
 

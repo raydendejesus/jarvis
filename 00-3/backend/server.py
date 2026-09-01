@@ -665,6 +665,27 @@ async def list_connections() -> list[dict]:
     ]
 
 
+class OAuthClientCredentials(BaseModel):
+    client_id: str
+    client_secret: str
+
+
+@app.post("/api/connections/google/credentials")
+async def google_save_credentials(update: OAuthClientCredentials) -> dict:
+    if not update.client_id.strip() or not update.client_secret.strip():
+        raise HTTPException(status_code=400, detail="Both the Client ID and Client secret are required.")
+    google_auth.save_client_config(update.client_id.strip(), update.client_secret.strip())
+    return {"ok": True}
+
+
+@app.post("/api/connections/github/credentials")
+async def github_save_credentials(update: OAuthClientCredentials) -> dict:
+    if not update.client_id.strip() or not update.client_secret.strip():
+        raise HTTPException(status_code=400, detail="Both the Client ID and Client secret are required.")
+    github_auth.save_client_config(update.client_id.strip(), update.client_secret.strip())
+    return {"ok": True}
+
+
 @app.get("/api/connections/google/start")
 async def google_connect_start() -> Response:
     from fastapi.responses import RedirectResponse

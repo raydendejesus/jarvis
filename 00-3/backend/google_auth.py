@@ -57,6 +57,12 @@ def is_configured() -> bool:
     return load_client_config() is not None
 
 
+def save_client_config(client_id: str, client_secret: str) -> None:
+    CONFIG_FILE.write_text(
+        json.dumps({"client_id": client_id, "client_secret": client_secret}, indent=2), encoding="utf-8"
+    )
+
+
 def _load_tokens() -> dict | None:
     if not TOKENS_FILE.exists():
         return None
