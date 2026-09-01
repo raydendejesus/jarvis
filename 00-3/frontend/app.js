@@ -711,26 +711,57 @@ async function loadConnections() {
         });
         row.appendChild(btn);
       } else if (conn.auth_style === "oauth" && !conn.configured) {
+        row.classList.add("connection-row-setup");
+
+        const intro = document.createElement("p");
+        intro.className = "hint-text";
+        intro.textContent = `Paste the Client ID and Client secret from your ${conn.label.split(" (")[0]} OAuth client below, then click Save. No file editing needed.`;
+        row.appendChild(intro);
+
+        const idLabel = document.createElement("label");
+        idLabel.className = "field-row";
+        const idSpan = document.createElement("span");
+        idSpan.textContent = "Client ID";
         const idInput = document.createElement("input");
         idInput.type = "text";
-        idInput.placeholder = "Client ID";
+        idInput.placeholder = "Paste Client ID here";
+        idLabel.append(idSpan, idInput);
+
+        const secretLabel = document.createElement("label");
+        secretLabel.className = "field-row";
+        const secretSpan = document.createElement("span");
+        secretSpan.textContent = "Client secret";
         const secretInput = document.createElement("input");
         secretInput.type = "password";
-        secretInput.placeholder = "Client secret";
+        secretInput.placeholder = "Paste Client secret here";
+        secretLabel.append(secretSpan, secretInput);
+
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "hud-btn";
         btn.textContent = "Save";
+        const saveMsg = document.createElement("span");
+        saveMsg.className = "hint-text";
         btn.addEventListener("click", async () => {
-          if (!idInput.value.trim() || !secretInput.value.trim()) return;
+          if (!idInput.value.trim() || !secretInput.value.trim()) {
+            saveMsg.textContent = "Both fields are required.";
+            saveMsg.classList.add("error");
+            return;
+          }
           const resp = await fetch(`/api/connections/${conn.name}/credentials`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ client_id: idInput.value.trim(), client_secret: secretInput.value.trim() }),
           });
-          if (resp.ok) loadConnections();
+          if (resp.ok) {
+            loadConnections();
+          } else {
+            saveMsg.textContent = "Save failed - check the backend is running and try again.";
+            saveMsg.classList.add("error");
+          }
         });
-        row.append(idInput, secretInput, btn);
+
+        row.append(idLabel, secretLabel, btn, saveMsg);
       } else if (conn.auth_style === "oauth") {
         const btn = document.createElement("button");
         btn.type = "button";

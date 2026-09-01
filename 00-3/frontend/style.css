@@ -628,6 +628,37 @@ body.speaking .core::before {
   min-width: 160px;
 }
 
+.connection-row-setup {
+  display: block;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+
+.connection-row-setup .field-row {
+  margin: 6px 0;
+}
+
+.connection-row-setup .field-row span {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+.connection-row-setup input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(6, 11, 14, 0.8);
+  color: var(--cyan);
+  border: 1px solid var(--cyan-dim);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.connection-row-setup .hud-btn {
+  margin-top: 4px;
+}
+
 .field-row select {
   background: rgba(6, 11, 14, 0.8);
   color: var(--cyan);
