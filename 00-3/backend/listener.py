@@ -44,21 +44,40 @@ _awake_until = 0.0
 # actually speaking into.
 PREFERRED_DEVICE_NAMES = ["Insta360 Link", "HyperX Cloud", "Headset Microphone"]
 
+# Devices that silently capture something other than a real physical mic
+# (game-audio bridges, VR audio loopbacks, voice-changer virtual devices) -
+# if Windows' actual default input is one of these, it's worth overriding.
+# Otherwise, trust the real default rather than a hardcoded preference list -
+# a fixed priority order previously picked a webcam's mic over the user's
+# actual headset just because it came first in PREFERRED_DEVICE_NAMES, even
+# though the headset was already correctly set as the Windows default.
+BLOCKED_DEVICE_NAME_FRAGMENTS = [
+    "voicemod", "virtual desktop audio", "oculus virtual", "vdvad",
+    "steelseries sonar", "stereo mix", "wave out mix",
+]
+
 
 def _pick_input_device() -> int | None:
     try:
         devices = sd.query_devices()
+        default_input = sd.query_devices(kind="input")
     except Exception as exc:  # noqa: BLE001
         print(f"[listener] could not query audio devices: {exc}", flush=True)
         return None
 
+    default_name = (default_input.get("name") or "").lower()
+    if not any(bad in default_name for bad in BLOCKED_DEVICE_NAME_FRAGMENTS):
+        print(f"[listener] using Windows' default input device: {default_input['name']}", flush=True)
+        return None  # None tells sounddevice to use the system default itself
+
+    print(f"[listener] Windows' default input ('{default_input['name']}') looks like a virtual/loopback device - looking for a real mic instead", flush=True)
     for preferred in PREFERRED_DEVICE_NAMES:
         for i, d in enumerate(devices):
             if d["max_input_channels"] > 0 and preferred.lower() in d["name"].lower():
-                print(f"[listener] using input device: {d['name']}", flush=True)
+                print(f"[listener] using fallback input device: {d['name']}", flush=True)
                 return i
 
-    print("[listener] no preferred mic found, falling back to system default input", flush=True)
+    print("[listener] no known-good mic found either - falling back to system default anyway", flush=True)
     return None
 
 

@@ -5,13 +5,22 @@ import time
 import webbrowser
 from pathlib import Path
 
-import httpx
-import pystray
-from PIL import Image, ImageDraw
-
 PROJECT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = PROJECT_DIR / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
+
+# Redirect this process's own output here directly, rather than relying on
+# whatever launched it (the Startup shortcut, JARVIS.bat, or a manual
+# restart) to redirect it - none of those do, so print()/listener.py's
+# logging previously went nowhere unless launched with the right shell
+# redirection by hand, making tray_out.log silently go stale after any
+# restart that didn't happen to include it.
+sys.stdout = open(PROJECT_DIR / "tray_out.log", "a", encoding="utf-8", buffering=1)
+sys.stderr = open(PROJECT_DIR / "tray_err.log", "a", encoding="utf-8", buffering=1)
+
+import httpx
+import pystray
+from PIL import Image, ImageDraw
 
 import config as config_module  # noqa: E402
 import listener  # noqa: E402

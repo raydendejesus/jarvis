@@ -98,6 +98,18 @@ async def block_cross_origin_writes(request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def no_cache_frontend_files(request, call_next):
+    """This project's frontend files get edited constantly during development
+    and the browser's default caching repeatedly served a stale copy after a
+    normal refresh, making it look like a change hadn't taken effect when it
+    actually had - force every non-API GET to always be refetched fresh."""
+    response = await call_next(request)
+    if request.method == "GET" and not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 class ChatRequest(BaseModel):
     message: str
 

@@ -466,26 +466,22 @@ async function populateAudioDevices() {
   if (savedSpeaker && speakers.some((d) => d.deviceId === savedSpeaker)) speakerSelect.value = savedSpeaker;
 }
 
+async function onAudioTabActivated() {
+  try {
+    const primer = await navigator.mediaDevices.getUserMedia({ audio: true });
+    primer.getTracks().forEach((t) => t.stop());
+  } catch (err) {
+    console.warn("Microphone permission not granted:", err);
+  }
+  await populateAudioDevices();
+  const micSelect = document.getElementById("micSelect");
+  if (micSelect && micSelect.value) startLevelMeter(micSelect.value);
+}
+
 function initAudioPanel() {
-  const panel = document.getElementById("audioPanel");
   const micSelect = document.getElementById("micSelect");
   const speakerSelect = document.getElementById("speakerSelect");
-  if (!panel || !micSelect || !speakerSelect) return;
-
-  panel.addEventListener("toggle", async () => {
-    if (!panel.open) {
-      stopLevelMeter();
-      return;
-    }
-    try {
-      const primer = await navigator.mediaDevices.getUserMedia({ audio: true });
-      primer.getTracks().forEach((t) => t.stop());
-    } catch (err) {
-      console.warn("Microphone permission not granted:", err);
-    }
-    await populateAudioDevices();
-    if (micSelect.value) startLevelMeter(micSelect.value);
-  });
+  if (!micSelect || !speakerSelect) return;
 
   micSelect.addEventListener("change", () => {
     localStorage.setItem("jarvis_mic", micSelect.value);
@@ -784,6 +780,11 @@ function activateTab(name) {
   }
   for (const panel of document.querySelectorAll(".tab-panel")) {
     panel.hidden = panel.id !== `tab-${name}`;
+  }
+  if (name === "audio") {
+    onAudioTabActivated();
+  } else {
+    stopLevelMeter();
   }
   try {
     localStorage.setItem("jarvis_active_tab", name);
