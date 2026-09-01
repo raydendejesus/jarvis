@@ -1,0 +1,13 @@
+# Real credentials/secrets - never publish these. Only the *_config.example.json
+# templates belong in this repo; everyone's real config lives outside git,
+# in their own O:\JarvisAI\backend (or wherever they run it from).
+**/google_oauth_config.json
+**/github_oauth_config.json
+**/discord_config.json
+**/notion_config.json
+**/telephony_config.json
+**/config.json
+**/*.env
+**/known_faces/
+**/memory/facts.json
+**/billing.json
