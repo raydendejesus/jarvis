@@ -124,6 +124,7 @@
       </div>
 
       <div class="tab-panel" id="tab-audio" hidden>
+        <p class="hint-text" id="audioStatusMsg"></p>
         <label class="field-row">
           <span>Microphone</span>
           <select id="micSelect"></select>
@@ -134,10 +135,11 @@
           <select id="speakerSelect"></select>
         </label>
         <p class="hint-text">
-          Speaker output is fully switchable here. The microphone used for wake-word
-          listening always follows Windows' default recording device - this panel lets
-          you preview a mic's input level, but to actually change which one Jarvis
-          listens through, set it as default in Windows Sound settings.
+          This panel previews devices through your browser tab only - it can't change what
+          the always-on background listener (the thing that actually hears "Jarvis") uses,
+          since that runs outside the browser and always follows Windows' default recording
+          device. To change which mic Jarvis listens through, set it as default in Windows
+          Sound settings.
         </p>
       </div>
     </div>

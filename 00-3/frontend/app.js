@@ -174,7 +174,7 @@ function setDashboardMic(enabled) {
   } else {
     shouldAutoRestart = false;
     if (recognition) recognition.stop();
-    statusEl.textContent = "muted (native listener active)";
+    statusEl.textContent = "tab mic off - background listener is hearing you";
     log("This tab's microphone is off - Jarvis is still listening via the background service.");
   }
 }
@@ -234,7 +234,7 @@ function initRecognition() {
     log(`Say "${WAKE_WORD}" followed by your request.`);
     startRecognition();
   } else {
-    statusEl.textContent = "muted (native listener active)";
+    statusEl.textContent = "tab mic off - background listener is hearing you";
     log("This tab's microphone is off by default - the always-on background listener already covers voice commands. Turn this on in Settings if you also want this tab listening.");
   }
 }
@@ -446,6 +446,13 @@ async function startLevelMeter(deviceId) {
   tick();
 }
 
+function setAudioStatusMsg(text, isError) {
+  const el = document.getElementById("audioStatusMsg");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("error", Boolean(isError));
+}
+
 async function populateAudioDevices() {
   const micSelect = document.getElementById("micSelect");
   const speakerSelect = document.getElementById("speakerSelect");
@@ -464,14 +471,39 @@ async function populateAudioDevices() {
   const savedSpeaker = localStorage.getItem("jarvis_speaker");
   if (savedMic && mics.some((d) => d.deviceId === savedMic)) micSelect.value = savedMic;
   if (savedSpeaker && speakers.some((d) => d.deviceId === savedSpeaker)) speakerSelect.value = savedSpeaker;
+
+  if (mics.length === 0) {
+    setAudioStatusMsg(
+      "The browser isn't reporting any microphones. Click the padlock/site-info icon in the address bar, set Microphone to Allow for this page, then reopen this tab.",
+      true
+    );
+  } else if (!mics[0].label) {
+    setAudioStatusMsg(
+      "Devices found, but the browser hasn't granted microphone permission for this page yet, so names/level preview won't work. Click the padlock icon in the address bar and allow Microphone access, then reopen this tab.",
+      true
+    );
+  } else {
+    setAudioStatusMsg("");
+  }
 }
 
 async function onAudioTabActivated() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setAudioStatusMsg(
+      "This browser tab can't access microphones from this address. Open the dashboard as http://127.0.0.1:8765 or http://localhost:8765, not a different hostname/IP.",
+      true
+    );
+    return;
+  }
   try {
     const primer = await navigator.mediaDevices.getUserMedia({ audio: true });
     primer.getTracks().forEach((t) => t.stop());
   } catch (err) {
     console.warn("Microphone permission not granted:", err);
+    setAudioStatusMsg(
+      `Browser microphone access was denied (${err.name}). Click the padlock/site-info icon in the address bar, set Microphone to Allow, then reopen this tab. This only affects this preview panel - Jarvis's actual hearing runs outside the browser and is unaffected.`,
+      true
+    );
   }
   await populateAudioDevices();
   const micSelect = document.getElementById("micSelect");
