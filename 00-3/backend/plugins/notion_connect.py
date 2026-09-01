@@ -11,6 +11,8 @@ PLUGIN_NAME = "notion_connect"
 TOGGLE_LABEL = "Notion"
 CONFIG_KEY = "notion_connect_enabled"
 ENABLED_BY_DEFAULT = False
+RELATED_CONNECTION = "notion"
+VRAM_COST = "no local model"
 
 NOT_CONNECTED_MSG = (
     "Notion isn't connected yet - go to the dashboard's Connections panel and paste in an "

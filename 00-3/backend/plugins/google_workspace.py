@@ -16,6 +16,8 @@ PLUGIN_NAME = "google_workspace"
 TOGGLE_LABEL = "Google Workspace (Gmail / Calendar / Drive / Slides)"
 CONFIG_KEY = "google_workspace_enabled"
 ENABLED_BY_DEFAULT = False
+RELATED_CONNECTION = "google"
+VRAM_COST = "no local model"
 
 NOT_CONNECTED_MSG = (
     "Google isn't connected yet - go to the dashboard's Connections panel and click "

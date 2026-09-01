@@ -11,6 +11,8 @@ PLUGIN_NAME = "github_connect"
 TOGGLE_LABEL = "GitHub"
 CONFIG_KEY = "github_connect_enabled"
 ENABLED_BY_DEFAULT = False
+RELATED_CONNECTION = "github"
+VRAM_COST = "no local model"
 
 NOT_CONNECTED_MSG = (
     "GitHub isn't connected yet - go to the dashboard's Connections panel and click "

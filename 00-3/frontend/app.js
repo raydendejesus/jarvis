@@ -56,9 +56,17 @@ function showCanvas(html, title) {
 
 async function loadCanvasOnStartup() {
   try {
-    const resp = await fetch("/api/canvas");
-    const data = await resp.json();
-    if (data.html) showCanvas(data.html, data.title);
+    const [canvasResp, settingsResp] = await Promise.all([fetch("/api/canvas"), fetch("/api/settings")]);
+    const data = await canvasResp.json();
+    const settings = await settingsResp.json().catch(() => ({}));
+    if (data.html) {
+      showCanvas(data.html, data.title);
+    } else if (settings.code_canvas_enabled) {
+      showCanvas(
+        '<body style="font-family: system-ui, sans-serif; color: #94a3b8; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px;"><p>Nothing built yet - ask Jarvis to build you something.</p></body>',
+        ""
+      );
+    }
   } catch (err) {
     console.error("Failed to load canvas:", err);
   }
@@ -334,6 +342,13 @@ async function updateSetting(key, value) {
       throw new Error(data.detail || `Server error ${resp.status}`);
     }
     setIndicator(key, value);
+    if (key === "code_canvas_enabled") {
+      if (value) loadCanvasOnStartup();
+      else {
+        const panel = document.getElementById("canvasPanel");
+        if (panel) panel.hidden = true;
+      }
+    }
   } catch (err) {
     errorEl.textContent = err.message;
     const el = document.getElementById(`toggle-${key}`);
@@ -560,49 +575,75 @@ function initDashboardMicToggle() {
   el.addEventListener("change", () => setDashboardMic(el.checked));
 }
 
+function buildPluginRow(plugin, errorEl) {
+  const row = document.createElement("label");
+  row.className = "switch-row";
+  const span = document.createElement("span");
+  span.textContent = plugin.label + (plugin.always_on ? " (always on)" : "");
+  const vram = document.createElement("span");
+  vram.className = "vram-tag";
+  vram.textContent = plugin.vram_cost || "no local model";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = plugin.enabled;
+  input.disabled = plugin.always_on;
+  const switchSpan = document.createElement("span");
+  switchSpan.className = "switch";
+  row.append(span, vram, input, switchSpan);
+
+  if (!plugin.always_on) {
+    input.addEventListener("change", async () => {
+      errorEl.textContent = "";
+      try {
+        const resp = await fetch(`/api/plugins/${encodeURIComponent(plugin.name)}/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: input.checked }),
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.detail || `Server error ${resp.status}`);
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+        input.checked = !input.checked;
+      }
+    });
+  }
+  return row;
+}
+
 async function loadPlugins() {
-  const listEl = document.getElementById("pluginsList");
+  const connectedEl = document.getElementById("pluginsListConnected");
+  const standaloneEl = document.getElementById("pluginsListStandalone");
   const errorEl = document.getElementById("pluginsError");
-  if (!listEl) return;
+  if (!connectedEl || !standaloneEl) return;
   try {
     const resp = await fetch("/api/plugins");
     const plugins = await resp.json();
-    if (!plugins.length) {
-      listEl.innerHTML = '<p class="hint-text">No plugins installed - drop one into backend/plugins/.</p>';
-      return;
+    connectedEl.innerHTML = "";
+    standaloneEl.innerHTML = "";
+
+    const connected = plugins.filter((p) => p.related_connection);
+    const standalone = plugins.filter((p) => !p.related_connection);
+
+    if (!connected.length) {
+      connectedEl.innerHTML = '<p class="hint-text">None yet.</p>';
+    } else {
+      for (const plugin of connected) {
+        const row = buildPluginRow(plugin, errorEl);
+        const hint = document.createElement("p");
+        hint.className = "hint-text";
+        hint.textContent = `Needs the "${plugin.related_connection}" connection - see the Connections tab.`;
+        connectedEl.append(row, hint);
+      }
     }
-    listEl.innerHTML = "";
-    for (const plugin of plugins) {
-      const row = document.createElement("label");
-      row.className = "switch-row";
-      const span = document.createElement("span");
-      span.textContent = plugin.label + (plugin.always_on ? " (always on)" : "");
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = plugin.enabled;
-      input.disabled = plugin.always_on;
-      const switchSpan = document.createElement("span");
-      switchSpan.className = "switch";
-      row.append(span, input, switchSpan);
-      listEl.appendChild(row);
-      if (!plugin.always_on) {
-        input.addEventListener("change", async () => {
-          errorEl.textContent = "";
-          try {
-            const resp = await fetch(`/api/plugins/${encodeURIComponent(plugin.name)}/toggle`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ enabled: input.checked }),
-            });
-            if (!resp.ok) {
-              const data = await resp.json().catch(() => ({}));
-              throw new Error(data.detail || `Server error ${resp.status}`);
-            }
-          } catch (err) {
-            errorEl.textContent = err.message;
-            input.checked = !input.checked;
-          }
-        });
+
+    if (!standalone.length) {
+      standaloneEl.innerHTML = '<p class="hint-text">None yet.</p>';
+    } else {
+      for (const plugin of standalone) {
+        standaloneEl.appendChild(buildPluginRow(plugin, errorEl));
       }
     }
   } catch (err) {
@@ -619,8 +660,9 @@ async function loadConnections() {
   const listEl = document.getElementById("connectionsList");
   if (!listEl) return;
   try {
-    const resp = await fetch("/api/connections");
-    const connections = await resp.json();
+    const [connResp, pluginsResp] = await Promise.all([fetch("/api/connections"), fetch("/api/plugins")]);
+    const connections = await connResp.json();
+    const plugins = await pluginsResp.json().catch(() => []);
     listEl.innerHTML = "";
     for (const conn of connections) {
       const row = document.createElement("div");
@@ -677,6 +719,16 @@ async function loadConnections() {
 
       listEl.appendChild(row);
 
+      const relatedPlugin = plugins.find((p) => p.related_connection === conn.name);
+      if (relatedPlugin) {
+        const pluginHint = document.createElement("p");
+        pluginHint.className = "hint-text";
+        pluginHint.textContent = conn.connected
+          ? `Turn on the "${relatedPlugin.label}" plugin in the Plugins tab to actually use this.`
+          : `Once connected, turn on the "${relatedPlugin.label}" plugin in the Plugins tab to use it.`;
+        listEl.appendChild(pluginHint);
+      }
+
       if (conn.name === "discord" && conn.invite_url) {
         const inviteP = document.createElement("p");
         inviteP.className = "hint-text";
@@ -706,14 +758,44 @@ function checkConnectionRedirectResult() {
       ? `${service[0].toUpperCase()}${service.slice(1)} account connected.`
       : `${service[0].toUpperCase()}${service.slice(1)} connection failed: ${params.get("detail") || "unknown error"}`;
   }
-  const connectionsPanel = document.getElementById("connectionsPanel");
-  if (connectionsPanel) connectionsPanel.open = true;
+  activateTab("connections");
   window.history.replaceState({}, "", window.location.pathname);
+}
+
+function activateTab(name) {
+  for (const btn of document.querySelectorAll(".tab-btn")) {
+    btn.classList.toggle("active", btn.dataset.tab === name);
+  }
+  for (const panel of document.querySelectorAll(".tab-panel")) {
+    panel.hidden = panel.id !== `tab-${name}`;
+  }
+  try {
+    localStorage.setItem("jarvis_active_tab", name);
+  } catch (err) {
+    // storage unavailable - not worth failing over
+  }
+}
+
+function initTabs() {
+  const bar = document.querySelector(".tab-bar");
+  if (!bar) return;
+  bar.addEventListener("click", (event) => {
+    const btn = event.target.closest(".tab-btn");
+    if (btn) activateTab(btn.dataset.tab);
+  });
+  let saved = "settings";
+  try {
+    saved = localStorage.getItem("jarvis_active_tab") || "settings";
+  } catch (err) {
+    // storage unavailable - default to settings
+  }
+  activateTab(saved);
 }
 
 initRecognition();
 initDashboardMicToggle();
 initSettingsPanel();
+initTabs();
 initFileAttach();
 initEnrollButton();
 initAudioPanel();

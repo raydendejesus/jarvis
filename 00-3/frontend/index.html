@@ -34,6 +34,8 @@
     </p>
   </aside>
 
+  <div class="col-divider"></div>
+
   <main>
     <div class="corner tl"></div>
     <div class="corner tr"></div>
@@ -71,66 +73,77 @@
       <span id="enrollResult" class="hint-text"></span>
     </div>
 
-    <details class="hud-panel">
-      <summary>Settings</summary>
-      <label class="switch-row"><span>Jarvis enabled</span><input type="checkbox" id="toggle-ai_enabled" /><span class="switch"></span></label>
-      <label class="switch-row"><span>Also listen via this tab's mic</span><input type="checkbox" id="toggle-dashboard-mic" /><span class="switch"></span></label>
-      <p class="hint-text">Off by default - the always-on background listener already hears you, so leaving both on can make Jarvis answer twice from two slightly different transcriptions of the same thing.</p>
-      <label class="switch-row"><span>Screen access</span><input type="checkbox" id="toggle-screen_access" /><span class="switch"></span></label>
-      <label class="switch-row"><span>Camera access</span><input type="checkbox" id="toggle-camera_access" /><span class="switch"></span></label>
-      <label class="switch-row"><span>Desk Guard</span><input type="checkbox" id="toggle-desk_guard_enabled" /><span class="switch"></span></label>
-      <label class="switch-row"><span>Calling</span><input type="checkbox" id="toggle-calling_enabled" /><span class="switch"></span></label>
-      <label class="switch-row"><span>Unanswered-call notifications</span><input type="checkbox" id="toggle-call_notifications_enabled" /><span class="switch"></span></label>
-      <button type="button" id="toggle-location_mode" class="hud-btn location-cycle-btn">Location: OFF (click to change)</button>
-      <p class="hint-text">Click cycles OFF &rarr; PC &rarr; PHONE &rarr; OFF. Only the device matching the current mode shares its position.</p>
-      <label class="switch-row"><span>Browser control</span><input type="checkbox" id="toggle-browser_control_enabled" /><span class="switch"></span></label>
-      <label class="switch-row"><span>&nbsp;&nbsp;&rarr; allow direct screen-control fallback</span><input type="checkbox" id="toggle-browser_pixel_fallback_enabled" /><span class="switch"></span></label>
-      <p class="hint-text">
-        Browser control lets Jarvis click and type in your active browser tab through his own
-        on-screen cursor when you ask him to - it never touches your real mouse. The fallback
-        below it takes direct pixel-level control for pages it can't otherwise read, and always
-        shows an on-screen warning you must approve first.
-      </p>
-      <label class="switch-row"><span>Code canvas</span><input type="checkbox" id="toggle-code_canvas_enabled" /><span class="switch"></span></label>
-      <p class="hint-text">
-        Lets Jarvis build a real, live website/app/demo and show it in a preview panel when you
-        ask - "build me a website for X." Rendered sandboxed, with no access to this dashboard.
-      </p>
-      <p id="settingsError" class="hint-text error"></p>
-    </details>
+    <div class="control-panel">
+      <div class="tab-bar" role="tablist">
+        <button type="button" class="tab-btn active" data-tab="settings">Settings</button>
+        <button type="button" class="tab-btn" data-tab="plugins">Plugins</button>
+        <button type="button" class="tab-btn" data-tab="connections">Connections</button>
+        <button type="button" class="tab-btn" data-tab="audio">Audio</button>
+      </div>
 
-    <details class="hud-panel" id="pluginsPanel">
-      <summary>Plugins</summary>
-      <div id="pluginsList"></div>
-      <p class="hint-text">Dashboard/native-listener only - never available over a phone call.</p>
-      <p id="pluginsError" class="hint-text error"></p>
-    </details>
+      <div class="tab-panel" id="tab-settings">
+        <label class="switch-row"><span>Jarvis enabled</span><input type="checkbox" id="toggle-ai_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Also listen via this tab's mic</span><input type="checkbox" id="toggle-dashboard-mic" /><span class="switch"></span></label>
+        <p class="hint-text">Off by default - the always-on background listener already hears you, so leaving both on can make Jarvis answer twice from two slightly different transcriptions of the same thing.</p>
+        <label class="switch-row"><span>Screen access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-screen_access" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Camera access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-camera_access" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Desk Guard</span><span class="vram-tag">&lt;1 GB</span><input type="checkbox" id="toggle-desk_guard_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Calling</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-calling_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Unanswered-call notifications</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-call_notifications_enabled" /><span class="switch"></span></label>
+        <button type="button" id="toggle-location_mode" class="hud-btn location-cycle-btn">Location: OFF (click to change)</button>
+        <p class="hint-text">Click cycles OFF &rarr; PC &rarr; PHONE &rarr; OFF. Only the device matching the current mode shares its position. No local model.</p>
+        <label class="switch-row"><span>Browser control</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-browser_control_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>&nbsp;&nbsp;&rarr; allow direct screen-control fallback</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-browser_pixel_fallback_enabled" /><span class="switch"></span></label>
+        <p class="hint-text">
+          Browser control lets Jarvis click and type in your active browser tab through his own
+          on-screen cursor when you ask him to - it never touches your real mouse. The fallback
+          below it takes direct pixel-level control for pages it can't otherwise read (reusing
+          the same vision model as Screen/Camera access), and always shows an on-screen warning
+          you must approve first.
+        </p>
+        <label class="switch-row"><span>Code canvas</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-code_canvas_enabled" /><span class="switch"></span></label>
+        <p class="hint-text">
+          Lets Jarvis build a real, live website/app/demo and show it in a preview panel when you
+          ask - "build me a website for X." Rendered sandboxed, with no access to this dashboard.
+        </p>
+        <p id="settingsError" class="hint-text error"></p>
+      </div>
 
-    <details class="hud-panel" id="connectionsPanel">
-      <summary>Connections</summary>
-      <div id="connectionsList"></div>
-      <p class="hint-text" id="connectionsStatusMsg"></p>
-    </details>
+      <div class="tab-panel" id="tab-plugins" hidden>
+        <h3 class="tab-subheading">Connected-account plugins</h3>
+        <div id="pluginsListConnected"></div>
+        <h3 class="tab-subheading">Standalone plugins</h3>
+        <div id="pluginsListStandalone"></div>
+        <p class="hint-text">Dashboard/native-listener only - never available over a phone call. New plugins dropped into <code>backend/plugins/</code> appear here automatically.</p>
+        <p id="pluginsError" class="hint-text error"></p>
+      </div>
 
-    <details class="hud-panel" id="audioPanel">
-      <summary>Audio I/O</summary>
-      <label class="field-row">
-        <span>Microphone</span>
-        <select id="micSelect"></select>
-      </label>
-      <div class="level-meter"><div id="levelBar" class="level-fill"></div></div>
-      <label class="field-row">
-        <span>Speaker output</span>
-        <select id="speakerSelect"></select>
-      </label>
-      <p class="hint-text">
-        Speaker output is fully switchable here. The microphone used for wake-word
-        listening always follows Windows' default recording device - this panel lets
-        you preview a mic's input level, but to actually change which one Jarvis
-        listens through, set it as default in Windows Sound settings.
-      </p>
-    </details>
+      <div class="tab-panel" id="tab-connections" hidden>
+        <div id="connectionsList"></div>
+        <p class="hint-text" id="connectionsStatusMsg"></p>
+      </div>
+
+      <div class="tab-panel" id="tab-audio" hidden>
+        <label class="field-row">
+          <span>Microphone</span>
+          <select id="micSelect"></select>
+        </label>
+        <div class="level-meter"><div id="levelBar" class="level-fill"></div></div>
+        <label class="field-row">
+          <span>Speaker output</span>
+          <select id="speakerSelect"></select>
+        </label>
+        <p class="hint-text">
+          Speaker output is fully switchable here. The microphone used for wake-word
+          listening always follows Windows' default recording device - this panel lets
+          you preview a mic's input level, but to actually change which one Jarvis
+          listens through, set it as default in Windows Sound settings.
+        </p>
+      </div>
+    </div>
   </main>
+
+  <div class="col-divider"></div>
 
   <aside class="canvas-area" id="canvasPanel" hidden>
     <h2 class="side-heading">Canvas <span id="canvasTitle" class="side-count"></span></h2>

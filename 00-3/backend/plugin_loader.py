@@ -12,6 +12,16 @@ a single .py file in that folder exposing some subset of:
                                   format the core tools use
   DISPATCH (dict[str, callable]) - tool name -> async handler taking one
                                   `args: dict` parameter and returning a string
+  RELATED_CONNECTION (str, optional) - the name of an entry in server.py's
+                                  /api/connections list this plugin needs
+                                  signed in (e.g. "google") - lets the
+                                  dashboard group this plugin with its
+                                  connection automatically instead of you
+                                  having to wire that grouping up by hand.
+  VRAM_COST (str, optional)     - shown next to this plugin's toggle, e.g.
+                                  "no local model" or "~6 GB when used".
+                                  Defaults to "no local model" if omitted -
+                                  most plugins are just network calls.
 
 Dropping a well-formed file into plugins/ is the whole installation step - no
 core file needs editing. A plugin that fails to import is skipped with a
@@ -59,6 +69,8 @@ def plugin_metadata() -> list[dict]:
             "config_key": config_key,
             "label": getattr(module, "TOGGLE_LABEL", name),
             "always_on": config_key is None,
+            "related_connection": getattr(module, "RELATED_CONNECTION", None),
+            "vram_cost": getattr(module, "VRAM_COST", "no local model"),
         })
     return result
 

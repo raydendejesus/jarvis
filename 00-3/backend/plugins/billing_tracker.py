@@ -15,6 +15,7 @@ PLUGIN_NAME = "billing_tracker"
 TOGGLE_LABEL = "Billing Tracker"
 CONFIG_KEY = "billing_tracker_enabled"
 ENABLED_BY_DEFAULT = False
+VRAM_COST = "no local model"
 
 DATA_FILE = Path(__file__).resolve().parent.parent / "plugins_data" / "billing.json"
 

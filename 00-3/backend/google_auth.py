@@ -18,6 +18,9 @@ import httpx
 CONFIG_FILE = Path(__file__).resolve().parent / "google_oauth_config.json"
 TOKENS_FILE = Path(__file__).resolve().parent / "connections" / "google_tokens.json"
 
+# Google's "Desktop app" OAuth client type auto-trusts any localhost/127.0.0.1
+# redirect without it needing to be pre-registered - this exact URI works
+# without sir ever having to type it into Google Cloud Console at all.
 REDIRECT_URI = "http://127.0.0.1:8765/api/connections/google/callback"
 
 # Gmail/Calendar/Drive stay read-only, deliberately - sending email, creating

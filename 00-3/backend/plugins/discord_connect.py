@@ -12,6 +12,8 @@ PLUGIN_NAME = "discord_connect"
 TOGGLE_LABEL = "Discord"
 CONFIG_KEY = "discord_connect_enabled"
 ENABLED_BY_DEFAULT = False
+RELATED_CONNECTION = "discord"
+VRAM_COST = "no local model"
 
 API = "https://discord.com/api/v10"
 

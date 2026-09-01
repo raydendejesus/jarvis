@@ -1,12 +1,8 @@
-# Jarvis 00-3
+# Jarvis
 
-A local, self-hosted AI assistant: a real LLM as the brain (running on your own GPU via Ollama), a natural British voice, wake-word listening that works whether or not a browser is open, vision (photos/video/screen/camera), a persistent memory and reactive knowledge base, location awareness, web research, real phone calling (Jarvis can call you, and you can call it), and its own on-screen cursor that can act inside whatever browser tab you're viewing when you ask it to.
-
-Nothing about the core assistant depends on a cloud AI provider or a subscription. The only external services involved are optional: a phone number provider (for calling) and a tunnel service (to expose your PC to that phone provider).
+A local, standalone personal AI assistant. Hermes 3 (via Ollama) is the brain, Edge TTS gives it a British voice, and you can talk to it either through a browser dashboard or a native background listener that works with no browser open at all. It researches the web and remembers what it learns, remembers things about you across restarts, knows your location, looks at photos/video/your screen/your camera, places and receives real phone calls, and can act inside a browser tab through its own on-screen cursor when you ask it to. Optionally it guards your desk with face recognition. No cloud LLM, no subscription. Runs entirely on this machine.
 
 ## System requirements & resource cost
-
-This runs a real local LLM plus a separate vision model plus local speech transcription, so it is meaningfully heavier than a typical hobby script. Numbers below are for the default models this project pulls.
 
 **VRAM usage (NVIDIA GPU):**
 
@@ -17,9 +13,9 @@ This runs a real local LLM plus a separate vision model plus local speech transc
 | Vision (`qwen2.5vl:7b`) | ~6 GB | Only while Screen Access, Camera Access, or the browser's pixel-control fallback is on *and* actively used |
 | Desk Guard face matching (`insightface`, ONNX) | <1 GB | Only while Desk Guard is enabled |
 | Voice output (`edge-tts`) | 0 (not a local model - a network call to Microsoft's TTS service) | N/A |
-| Browser Control (the DOM-based path) | 0 (no model at all - it's structured text through the brain that's already loaded) | Only while you're actively asking it to act in a tab |
+| Browser Control (normal path) | 0 (no model at all - structured text through the brain that's already loaded) | Only while actively acting in a tab |
 
-Typical steady-state use (just talking to it) is **~6-7 GB VRAM**. A moment of looking at your screen, camera, or an unreadable webpage can spike that to **~12-13 GB** while that one request is in flight, then it settles back down. Browser Control's normal path adds no VRAM at all; only its rare pixel-fallback path touches the vision model.
+Typical steady-state (just talking to it) is **~6-7 GB VRAM**. A moment of looking at your screen, camera, or an unreadable webpage can spike that to **~12-13 GB** while that one request is in flight, then it settles back down.
 
 **Bare minimum:** an 8 GB GPU (e.g. RTX 3060 Ti / RTX 2070) - covers the brain and native listener comfortably; vision requests will be noticeably slower since the vision model may need to swap in rather than sit resident alongside the brain.
 
@@ -27,395 +23,180 @@ Typical steady-state use (just talking to it) is **~6-7 GB VRAM**. A moment of l
 
 **Built and tested on:** an RTX 3090 (24 GB) - comfortable headroom for everything at once, including Desk Guard running continuously.
 
-**System RAM:** 16 GB minimum, 32 GB recommended. **Disk:** ~15-20 GB free for the Ollama models, Python dependencies, and Whisper/insightface's model downloads (this grows slowly afterward - memory and knowledge files are small plain text).
+**System RAM:** 16 GB minimum, 32 GB recommended. **Disk:** ~15-20 GB free for the Ollama models, Python dependencies, and Whisper/insightface's model downloads (grows slowly afterward - memory and knowledge files are small plain text).
 
-**No GPU?** It will still run - `faster-whisper` falls back to CPU automatically if the GPU path fails - but the LLM itself will be noticeably slower on CPU. This project was not designed or tuned for a CPU-only setup.
+**No GPU?** It'll still run - `faster-whisper` falls back to CPU automatically if the GPU path fails - but the LLM itself will be noticeably slower on CPU. Not designed or tuned for a CPU-only setup.
 
-### Pros
+## Running it
 
-- Fully local for the core loop: the LLM, vision, memory, knowledge base, and face matching all run on your own GPU - no subscription, no per-message API cost, no cloud AI account required for any of it.
-- Real, working phone calling (inbound and outbound) - unusual for a self-hosted hobby assistant.
-- Its own browser-acting cursor, without the heavier pixel-and-vision-model approach most "AI browses for you" tools use - most pages are read structurally, near-instantly, with no extra VRAM.
-- Every resource-heavy or privacy-sensitive capability (camera, screen, calling, Desk Guard, browser control) is an explicit, saved toggle - nothing turns itself on.
-- No tool can execute arbitrary code or reach an arbitrary network destination, and the one tool that can act on your behalf (Browser Control) needs a dedicated toggle plus fresh confirmation before its riskiest fallback path ever runs.
-- A self-improving reactive knowledge base: once it looks something up, it remembers the answer in a plain, human-readable text file you can read, edit, or delete yourself.
-- Open and inspectable: it's just Python and JavaScript files, nothing obfuscated, no telemetry added by this project.
+Double-click `JARVIS.bat` once. On first run it will:
 
-### Cons
+1. Create a Python virtual environment in `venv/` (isolated from every other Python project on this machine).
+2. Install all backend dependencies.
+3. Make sure Ollama is running, pull `hermes3` (~4.7GB) and `qwen2.5vl:7b` (~6GB) if missing, and build the `jarvis` persona model.
+4. Register Jarvis to start automatically at every Windows login (a shortcut in your Startup folder, no admin rights needed).
+5. Start the tray app, which starts the backend, the native background listener, and opens the dashboard.
 
-- GPU-hungry - not a good fit for a machine without a dedicated NVIDIA GPU.
-- Windows-only right now: Desk Guard's lock action, Startup-folder autostart, and the tray icon are all Windows-specific.
-- Not 100% local by default: the browser dashboard's speech recognition (if you turn it on) sends audio to Google's/Microsoft's cloud, and voice output (`edge-tts`) is a network call to Microsoft's TTS service, not an on-device model.
-- Phone calling setup is genuinely involved: two external accounts (Telnyx + ngrok), several manual API calls, and it's one of the more fragile parts of the system.
-- Browser Control's structural reading approach doesn't work on canvas-drawn pages (some games, some design tools) - its pixel-based fallback handles those, at the cost of the extra permission and warning overhead described below.
-- Desk Guard is a convenience feature, not a security system - lighting, glasses, hats, and camera angle can all cause a false lock (or, less often, a false match).
-- Single-user by design: conversation history, memory, and the phone book are global state, not per-user.
-- No authentication on the local dashboard beyond binding to `127.0.0.1` - anyone with access to that port on your machine can use it as you.
+After that, **Jarvis starts on its own every time you log into Windows** unless you've turned it off (see Toggles below) — you generally never need to run `JARVIS.bat` again. It's kept around for re-running setup (e.g. after editing the Modelfile) or as a manual fallback if you ever quit the tray app and want to relaunch by hand.
 
-## What it can do
+## Using it
 
-- Hold a spoken conversation, wake-word activated ("Jarvis, ...") or fully hands-free after one activation
-- Search the web and read pages for anything outside its own knowledge, and keep what it learns in a growing local knowledge base so it doesn't have to search again
-- Remember facts about you across restarts
-- Know your current location (PC or phone) if asked
-- Look at a photo or video you upload, or your screen/webcam on request
-- Read or act inside whatever browser tab you're viewing - click, type, scroll, or describe what's on the page - through its own on-screen cursor, only when you ask it to
-- Watch your desk via webcam and lock Windows if it sees a face that isn't yours (opt-in)
-- Keep a phone book and place/receive real phone calls, having an actual spoken conversation over the line
-- Build a real, live website/app preview and show it in a dashboard panel, on request
-- Search/read a connected Gmail, Calendar, Drive, GitHub repo, Discord server, or Notion workspace, or create a Google Slides presentation, once you've connected each
-- Run persistently: starts at Windows login, controllable via a system tray icon or the web dashboard
+**Two ways to talk to it, both landing on the same conversation:**
 
-## Architecture - how it works
+- **Browser dashboard** — its own microphone is **off by default** (the native listener below already covers this; having both on at once caused it to occasionally hear the same thing twice, slightly differently, and answer both). Turn on "Also listen via this tab's mic" in Settings if you want it anyway. You can always attach a photo or video via the "Attach" button regardless.
+- **Native background listener** — runs automatically once the tray app is up, independent of any browser tab. It transcribes what it hears locally (`faster-whisper`, GPU-accelerated) and responds the moment it catches "Jarvis" anywhere in what you said. This is what lets you talk to it from across the room with nothing open on screen.
 
-```
-                    ┌─────────────────────────────┐
-Voice in ────────►  │   FastAPI backend (server.py) │ ────► Voice out (edge-tts)
-(two paths,             │                             │
- see below)             │  conversation history        │
-                        │  + memory facts               │
-                        │  + phone book                 │
-                        │  + current toggle state        │
-                        └──────────────┬───────────────┘
-                                       │ POST /api/chat
-                                       ▼
-                        Ollama (hermes3 8B, "jarvis" persona)
-                                       │
-                          tool_calls?  │  final answer
-                          ┌────────────┴────────────┐
-                          ▼                          ▼
-                  web_search / fetch_webpage     spoken reply
-                  remember / check_knowledge
-                  save_knowledge / get_location
-                  view_screen / view_camera
-                  call_phone_number / hang_up_call
-                  browser_scan_page / browser_read_page
-                  browser_click / browser_type / browser_scroll
-                                       │
-                                       ▼ (long-poll)
-                        Browser extension (background.js)
-                                       │
-                                       ▼
-                        Content script in your active tab
-                        (element scanner + blue "Jarvis" cursor)
-```
+## Toggles
 
-**Two independent voice-input paths**, both landing on the same `/api/chat` endpoint:
+Everything sensitive is off by default and controlled from either the tray icon (right-click it) or the dashboard's Settings panel — both read/write the same `backend/config.json`, so they always agree:
 
-1. **Browser dashboard** (`frontend/`) - uses the browser's built-in `SpeechRecognition` API. Off by default (see Toggles) since the native listener below already covers this; turn it on per-browser-tab in Settings if you want it too.
-2. **Native background listener** (`backend/listener.py`) - runs continuously via the system tray app, independent of any browser. It watches the microphone for speech (a simple energy-threshold voice-activity detector), and when someone talks, transcribes the utterance locally with a small Whisper model (`faster-whisper`, GPU-accelerated). If the transcript contains "jarvis" anywhere, everything after that word is sent to Jarvis as a command. This is what lets you say "hey Jarvis" or just "Jarvis" from anywhere in the room with nothing open on screen, and it's the default/primary path.
+- **Jarvis Enabled** — master switch. Off means the assistant won't respond (but the tray/server keep running quietly so you can flip it back on).
+- **Screen Access** — lets it take a screenshot and describe it, only when you ask it to.
+- **Camera Access** — lets it grab a single webcam frame and describe it, only when you ask it to.
+- **Desk Guard** — see below. Requires enrolling your face first.
+- **Calling** — lets it place outbound phone calls. See Phone Calling below.
+- **Call Notifications** — tells you (by calling you back) about unanswered outbound calls.
+- **Location** — a three-state cycle button, not a simple on/off: click through OFF → PC → PHONE → OFF. Whichever device matches the current mode is the one that shares its position; the other stays quiet even if its dashboard is open.
+- **Browser Control** (+ its own pixel-fallback toggle) — see below.
+- **Code canvas** — see below.
+- *(each installed plugin)* — its own toggle appears automatically in the Plugins panel and tray menu.
 
-Both paths implement a lightweight "awake" window: once you've triggered Jarvis once, you can keep talking to it for a while without repeating the wake word (say "night Jarvis" to end it early).
+## Desk Guard (webcam presence lock)
 
-**The brain**: Hermes 3 (8B), running locally through [Ollama](https://ollama.com), with a custom persona baked in via `backend/Modelfile` (a British-butler personality, told explicitly what tools it has and how to use them, and given an explicit rule to never claim a tool succeeded when it actually failed - to avoid it fabricating a plausible-sounding answer instead of admitting it can't currently do something).
+Click **"Enroll my face"** on the dashboard first (look at the camera for a few seconds while it captures reference photos), then turn on **Desk Guard**. While enabled, roughly every 15 seconds it checks the webcam:
 
-**Tool use**: Ollama supports OpenAI-style function calling. Each request tells the model which tools are currently available (`backend/tools.py` builds this list based on your toggle settings), and if the model decides to use one, the backend executes it and feeds the result back before the model gives its final spoken answer. None of the tools can run arbitrary code or write arbitrary files - each does exactly one narrow thing (search the web, read a specific page, save a memory, check or save learned knowledge, get the last known location, grab one frame from the screen/camera, place a call, or act in a browser tab).
+- No one there → does nothing.
+- It's you → does nothing.
+- Someone else → **locks the PC using Windows' own lock screen** (the same as pressing Win+L).
 
-**Memory**: `backend/memory.py` keeps a flat JSON file of facts the model has been told to remember. Every conversation turn gets that list injected as context, so it "already knows" things you've told it before.
+Important: **voice cannot unlock Windows.** Getting back in always requires your real Windows password/PIN/Hello, on purpose — that's real security, not something a local AI should ever be able to bypass. Jarvis keeps running and listening in the background the whole time regardless. Every time the workstation is unlocked for real, it automatically captures a fresh reference photo of you, so it keeps adapting to new lighting, glasses, outfits, etc. over time.
 
-**Knowledge base**: `backend/knowledge.py` is separate from memory - it's what the model learns by researching, not what you tell it directly. Before searching the web on a factual question, it calls `check_knowledge` first; if nothing's saved yet, it searches, answers, and calls `save_knowledge` so the same question is instant next time. Saved knowledge lives as plain `.md` files under `backend/knowledge/`, automatically condensed once the total saved text passes 100,000 words.
+False locks are possible (bad lighting, an odd angle) — that's inherent to any face-matching system, not a bug. If Desk Guard is ever misbehaving, turn it off from the tray icon instantly, or just quit the tray app entirely; it's a normal background process, not a driver or service, and Windows always reserves Ctrl+Alt+Del regardless of anything Jarvis does.
 
-**Location**: the dashboard can share the browser's geolocation (works on a PC or a phone browser) via a three-state button in Settings - one click cycles OFF → PC → PHONE → OFF. Whichever mode is selected, only the matching device (a PC browser or a phone browser) actually shares its position; the other stays quiet even if its dashboard tab happens to be open. Nothing is written to disk - `backend/location.py` holds only the last-known position in memory.
+## Phone calling
 
-**Vision**: photos, video frames, screenshots, and webcam captures are all sent to a second model, `qwen2.5vl:7b` (Qwen's vision-language variant), which describes what it sees in plain text - that description then gets folded back into the normal conversation. Browser Control's pixel fallback (below) reuses this same model rather than adding another one.
+Already configured and working, via `backend/telephony_config.json` (Telnyx + an ngrok tunnel — the tray app keeps ngrok running and self-heals the tunnel URL if it ever changes). Jarvis can place outbound calls (phone book by name, or a raw number given in conversation) and receive inbound calls, having a real spoken conversation over the line using the same brain and voice as everywhere else. Say "Jarvis, call `<name>`" or "Jarvis, hang up" mid-call. When you call the number configured as `owner_number`, it treats you as "sir" the same as always; calling anyone else, it introduces itself as an assistant calling on your behalf and refers to you by nickname to that third party rather than sharing your name outright.
 
-**Browser Control**: covered in its own section below, since it's involved enough to need one.
+## Knowledge base (what Jarvis learns on its own)
 
-**Desk Guard**: uses `insightface` to compute a face embedding from a webcam frame and compares it against a small set of your own reference photos (captured via an "enroll" step). If a present face doesn't match closely enough, it calls Windows' own `LockWorkStation()` API - the same as pressing Win+L. It never has any way to unlock Windows; getting back in always requires your real password/PIN/Hello. After every real unlock, it grabs a fresh reference photo automatically, so its accuracy improves over time.
+Separate from memory — memory is what you tell it directly, the knowledge base is what it learns by researching. Before answering a factual question via `web_search`, it checks `check_knowledge` first; if it doesn't already know, it searches, answers, then saves what it learned via `save_knowledge` so the same question is instant next time. Saved knowledge lives as plain `.md` files under `backend/knowledge/`, auto-condensed once the total saved text passes 100,000 words so it doesn't grow forever.
 
-**Phone calling**: uses [Telnyx](https://telnyx.com)'s TeXML product (a TwiML-compatible call-control language). An incoming call hits a webhook on your machine; the response tells Telnyx to play a greeting and gather the caller's spoken reply; Telnyx transcribes that speech itself and posts the text back to another webhook, which runs it through the exact same Jarvis conversation pipeline used everywhere else, generates a spoken reply with edge-tts, and loops. Outbound calls work the same way in reverse - Jarvis's `call_phone_number` tool tells Telnyx to dial a number and fetch call instructions from your server once it connects. Because your PC isn't normally reachable from the internet, [ngrok](https://ngrok.com) creates a public HTTPS tunnel to your local server just for Telnyx's webhooks to reach. If you configure `owner_number` in `telephony_config.json`, calling that number specifically uses the normal "sir" persona instead of the third-party-caller persona it uses with everyone else.
+There's no separate always-on autonomous research process — it only ever learns something new in response to an actual question you asked, never on a background timer.
 
-**Toggles**: `backend/config.json` (auto-created with safe defaults - everything except the assistant itself starts OFF) gates screen access, camera access, calling, call notifications, location, Desk Guard, and Browser Control (plus its pixel-fallback sub-toggle). The system tray icon and the dashboard's Settings panel both read/write this same file.
+## Location awareness
+
+The dashboard can share the browser's location (works from a phone's browser too) to the `get_location` tool, gated by the three-state Location toggle described above. Nothing is written to disk — it's held in memory only, and is overwritten the next time either device reports in.
 
 ## Browser Control (Jarvis's own on-screen cursor)
 
-This is the newest capability in this version, so it gets a full walkthrough rather than a summary.
+Lets Jarvis click and type inside one browser tab you've explicitly handed it, through his own blue on-screen cursor labeled "Jarvis" — never your real mouse, and only when you ask him to do something there in the moment.
 
-### What it is
+**Installing the extension:** open `chrome://extensions`, turn on **Developer mode** (top right), then just **drag and drop the `browser_extension` folder straight onto that page** — this loads it directly and sidesteps a file-picker quirk where Chrome's own "Load unpacked" dialog can fail to show a folder that's actually there. If you ever need to reload it after an edit, drag it in again or use the refresh icon on its card.
 
-Lets Jarvis click, type, scroll, and read content inside whatever browser tab you're currently viewing - through his own separate on-screen cursor (a small blue pointer labeled "Jarvis"), never your real mouse. It works by reading the page's actual structure (buttons, links, form fields - the same information a screen reader uses), not by taking screenshots and guessing pixel coordinates, which is why it needs no extra VRAM and reacts almost instantly for ordinary webpages. It only ever acts because you asked it to do something in the moment - never on its own initiative, and never chained into an unrelated request.
+Once installed, turn on **Browser Control** from the tray icon or dashboard Settings (off by default), then just ask - e.g. "Jarvis, click the search box and type in cat videos." No per-tab activation step is needed; it acts on whichever tab is currently active, even while you're looking at something else entirely (that's the normal way to use it).
 
-### Installing the extension
-
-1. Open `chrome://extensions` and turn on **Developer mode** (top-right toggle).
-2. **Drag and drop the `browser_extension` folder straight onto that page.** This is the reliable method - Chrome's own "Load unpacked" file picker has a known quirk where it can fail to show a folder that's actually there; dragging it in sidesteps that entirely.
-3. You should see a card appear titled "Jarvis Browser Control" with no error badge. If Chrome asks you to confirm the permissions it's requesting, accept - it needs broad tab access specifically so it can act on whatever tab you're currently looking at without a separate click every time you switch tabs.
-
-To reload it after any future update, use the refresh icon on that same card (or drag the folder in again).
-
-### Turning it on and using it
-
-1. Turn on **Browser Control** in the dashboard Settings or tray menu (off by default).
-2. Just ask, e.g. "Jarvis, scan this page" or "Jarvis, click the search box and type in cat videos" or "Jarvis, what does this page say?" - no per-tab setup step is needed; it acts on whichever tab is currently active, even if you're not looking at Chrome right now (talking to it from another window is the normal way to use it).
-3. Watch for the blue "Jarvis" cursor gliding to each element before it acts - that's your visual confirmation it's genuinely doing something, not just replying with text.
-
-Two different tools cover two different questions: **"what does this page say"** uses `browser_read_page` (the actual rendered text, respecting anything JavaScript put there and whatever you're logged into); **"click/type something"** uses `browser_scan_page` first to find the right element, then `browser_click`/`browser_type`.
-
-### The pixel-control fallback, and its warning
-
-Most pages are read structurally as above. A minority - canvas-drawn games, some design tools - have no readable structure at all. For those, a second toggle, **only visible once Browser Control itself is on**, lets Jarvis fall back to taking a screenshot, having the vision model locate what you described, and clicking that exact pixel via Chrome's own debugger protocol. Every single use of this fallback shows a full-page on-screen warning that must be clicked "Allow" first - no exceptions, no "don't ask again," and Chrome's own "this tab is being debugged" bar is also visible the whole time it's active, on top of that warning. This path is deliberately more effort to reach than the normal one.
-
-### Toggle layers (this genuinely has more than one)
-
-1. The dashboard/tray **Browser Control** toggle - whether the tool exists for the model to call at all.
-2. The separate **pixel-fallback** toggle - whether the riskier fallback path exists, only reachable once (1) is on.
-3. The extension's own popup has an independent **Pause** switch that blocks every browser action instantly, regardless of either toggle above.
-4. The pixel fallback's on-screen warning, required fresh every single time it's used.
-
-### A note on the broader permission
-
-Because Jarvis acts on whatever tab you're currently viewing without a separate click each time, the extension requests access to any site (`<all_urls>`) rather than only one tab at a time. What that permission does *not* change is whether it's ever allowed to act: the dashboard toggle, "only when you ask in the moment," and the pixel-fallback's warning are exactly as strict either way - the broader permission only affects *which tab* it's technically capable of reaching into, not *whether* it will do anything there.
-
-## Optional addon: Jarvis Auto Research
-
-This repo also includes a separate, **not installed by default**, opt-in addon under [`addons/jarvis-auto-research/`](addons/jarvis-auto-research/) that lets Jarvis quietly research topics connected to what it already knows about you, in the background, on a strict daily cap - so if you later ask about it, it already knows. It ships as its own download with its own install/uninstall instructions and its own explanation of the safety guardrails (a keyword filter plus a domain blocklist - "a fence, not a cage" - applied only to this background pipeline, never to your own manual searches). See that folder's README before deciding whether to add it - the short version is in the box below.
-
-> **Quick summary of the Auto Research DLC**: once installed and turned on, Jarvis spends at most a few extra LLM calls a day (capped, default 3/day) quietly researching things connected to facts it already has about you, so a later question about it is answered instantly. It reuses the same brain model already running - no extra VRAM. Full install steps (which files to copy, exact code to paste into `server.py`/`config.py`, and how to add the toggle) are in [`addons/jarvis-auto-research/README.md`](addons/jarvis-auto-research/README.md).
+A second toggle, **pixel-control fallback**, only appears once Browser Control is on, and only matters for pages Jarvis can't read normally (canvas-drawn apps). Every single use of it shows a full-page on-screen warning that must be clicked "Allow" first — no exceptions. The extension's own popup also has an independent pause switch that overrides everything else instantly, regardless of any other toggle.
 
 ## Plugin system
 
-Unlike the addon above, plugins need zero core-file editing - a single `.py` file dropped into `backend/plugins/` is the entire install step. Each plugin declares its own tool schema(s), handler(s), and (optionally) a config toggle; `plugin_loader.py` discovers it automatically at startup, the dashboard's new **Plugins** panel and the tray menu both grow a toggle for it on their own, and its default state gets merged into `config.py` without you touching that file either. A plugin that fails to import is skipped with a logged warning rather than breaking the server or any other plugin.
-
-**`billing_tracker.py`** ships as the reference example and a genuinely usable one: log an expense in conversation ("log $12 for lunch") and later ask "how much did I spend last month" for a total and category breakdown. It's a complete, well-commented example of the whole interface - read it before writing your own.
-
-Plugins are **dashboard/native-listener only, by construction, not by convention**: phone calls use a small fixed tool list (`PHONE_TOOLS_OUTBOUND`/`PHONE_TOOLS_INBOUND`) that never touches `plugin_loader` at all, so there's no way to phone Jarvis and have it invoke a plugin, browser control, or screen/camera access - those all require sitting at the dashboard.
+Drop a `.py` file into `backend/plugins/` and it's fully installed — its tool schemas, handler(s), and optional config toggle are auto-discovered at startup, with the dashboard's **Plugins** panel and the tray menu both growing a toggle for it automatically. No core file needs editing. `plugins/billing_tracker.py` is the reference example (and genuinely usable — "log $12 for lunch," "how much did I spend last month"). Plugins are dashboard/native-listener only, by construction — phone calls use a small fixed tool list that never touches them.
 
 ## Code canvas
 
-"Jarvis, build me a website for X" gets you a real, live, working preview - not a description in words. Turn on **Code canvas** in Settings (off by default) and a panel appears on the right side of the dashboard: a genuine white preview pane rendered from the complete HTML/CSS/JS Jarvis writes in one shot each time. There's no partial-update mode - every call passes the entire page, even for a small tweak to something already showing.
+"Jarvis, build me a website for X" now gets you a real, live, working preview — not a description in words. Turn on **Code canvas** in Settings (off by default), and a panel appears on the right side of the dashboard: a genuine white preview pane, rendered from the complete HTML/CSS/JS Jarvis writes in one shot each time (there's no partial-update mode - every call passes the whole page, even for a small tweak).
 
-The preview renders in a sandboxed `<iframe sandbox="allow-scripts">` - scripts run, so interactive demos actually work, but the generated page has zero access to the dashboard, your cookies, or anything else in your real browser; it's a fully isolated, disposable document each time. The last thing built persists across a page reload and a backend restart (`backend/canvas_state.json`) so it doesn't just vanish, but it's view state, not something saved to memory the way a fact or knowledge-base entry is.
+The preview renders in a sandboxed `<iframe sandbox="allow-scripts">` - scripts run so interactive demos actually work, but the generated page has no access to this dashboard, your cookies, or anything else in your real browser; it's a fully isolated, disposable document. The last thing built persists across a dashboard reload (and a backend restart) so it doesn't just vanish, but it's view state, not something saved to memory the way a fact or a knowledge-base entry is.
 
-The model's context window was widened from 4096 to 8192 tokens specifically for this - generating a full page as a single tool call needs real headroom, and there's ample VRAM budget for it on any GPU this project already recommends.
+Widened the model's context window (4096 → 8192 tokens) specifically so a full page fits comfortably in one tool call - there's ample VRAM headroom for this on any GPU this project already recommends.
 
 ## Connecting external accounts (Google, GitHub, Discord, Notion)
 
-Some plugins need access to an account of yours rather than just a local file. Four ship so far, all **read-only by design** - searching/reading, never sending, creating, or writing, the same "start narrow, expand deliberately" approach used everywhere else in this project. Each gets its own toggle in the dashboard's Plugins panel and its own row in the **Connections** panel.
-
-Not every service uses the same connection mechanism, on purpose - a real OAuth-click flow where the service supports one (Google, GitHub), a pasted token where that's how the service is actually meant to be used for a personal tool (Discord's bot model, Notion's internal-integration model). Forcing a fake uniform "connect" story across services that don't work the same way underneath would mean lying about how it actually works; each is documented for what it really is instead.
+Four connected-account plugins ship so far, all **read-only by design** — searching/reading, never sending, creating, or writing. Each is its own toggle in the dashboard's Plugins panel and its own row in the **Connections** panel. Not every service uses the same connection mechanism — building each one honestly to how that service actually works, rather than forcing a fake uniform flow, matters more than a tidy story.
 
 ### Google (Gmail search, Calendar lookup, Drive search, Slides creation)
 
-**One-time setup in your own Google Cloud project** (can't be done on your behalf):
+A real "Connect Google Account" flow — click a button, sign in, grant access. One-time setup in your own Google Cloud account first:
 
 1. [console.cloud.google.com](https://console.cloud.google.com) → new project → **APIs & Services → Library** → enable Gmail API, Google Calendar API, Google Drive API, and **Google Slides API**.
 2. **APIs & Services → OAuth consent screen** → External → fill in an app name → leave it in **Testing** status → add your own Google account under **Test users**.
-3. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → Web application → Authorized redirect URI: `http://127.0.0.1:8765/api/connections/google/callback` → copy the Client ID and Client secret.
+3. **APIs & Services → Credentials → Create Credentials → OAuth client ID** → **Desktop app** (not Web application - this type auto-trusts any `localhost`/`127.0.0.1` address, so there's no redirect URI to type in and get wrong) → name it anything → copy the Client ID and Client secret.
 4. Copy `backend/google_oauth_config.example.json` to `backend/google_oauth_config.json`, paste in those two values, restart the backend.
-5. Turn on the **Google Workspace** plugin toggle, then click **Connect Google** in the Connections panel and sign in - you'll see Google's real sign-in page, review the permissions, and approve.
+5. Turn on the **Google Workspace** plugin toggle, then click **Connect Google** in the Connections panel and sign in.
 
-From then on: "Jarvis, search my Gmail for invoices," "what's on my calendar this week," "find that file in Drive," "make me a slideshow about X."
-
-Gmail/Calendar/Drive stay read-only - Slides is the one deliberate exception, since creating a presentation is genuinely the point and is low-consequence (nothing sent to anyone, trivially edited or deleted afterward) compared to sending an email or writing an arbitrary file. It returns a real, working link every time so you can verify it yourself rather than just trusting a spoken "done."
+Gmail/Calendar/Drive stay read-only. **Slides is the one deliberate exception** — "Jarvis, make me a slideshow about X" genuinely creates a real, editable Google Slides presentation and hands back a real link. Creating a presentation is low-consequence (nothing sent to anyone, trivially edited or deleted afterward), which is why this one gets write access while the others don't. If you connected Google before this was added, you'll need to click **Connect Google** again — the new scope requires a fresh grant.
 
 ### GitHub (list issues, pull requests, recent commits)
 
 Same OAuth-click shape as Google:
 
-1. [github.com/settings/developers](https://github.com/settings/developers) → **OAuth Apps → New OAuth App**. Homepage URL: `http://127.0.0.1:8765`. Authorization callback URL: `http://127.0.0.1:8765/api/connections/github/callback`.
+1. [github.com/settings/developers](https://github.com/settings/developers) → **OAuth Apps → New OAuth App**. Application name: anything. Homepage URL: `http://127.0.0.1:8765`. Authorization callback URL: `http://127.0.0.1:8765/api/connections/github/callback`.
 2. Register it, then **Generate a new client secret**. Copy the Client ID and the secret.
 3. Copy `backend/github_oauth_config.example.json` to `backend/github_oauth_config.json`, paste in those two values, restart the backend.
-4. Turn on the **GitHub** plugin toggle, then click **Connect GitHub** and authorize.
+4. Turn on the **GitHub** plugin toggle, then click **Connect GitHub** in the Connections panel and authorize.
 
-Worth knowing: GitHub's classic OAuth App scopes don't cleanly split read from write for private repos - the `repo` scope this requests technically permits more than reading. Jarvis's own tools only ever read (issues/PRs/commits, nothing that modifies), regardless of what the token could technically do.
+Worth knowing: GitHub's classic OAuth App scopes don't cleanly split read from write for private repos — the `repo` scope this requests technically permits more than reading. Jarvis's own tools only ever read (list issues/PRs/commits, nothing that creates or modifies), regardless of what the underlying token could do.
 
 ### Discord (list servers, list channels, read recent messages)
 
 Different mechanism, since reading/posting in servers you're in requires a bot, not a personal OAuth login:
 
-1. [discord.com/developers/applications](https://discord.com/developers/applications) → **New Application** → **Bot** tab → **Add Bot** → copy the bot token → note the **Application ID** from **General Information**.
-2. In the dashboard's Connections panel, paste the bot token (and Application ID) into the Discord field, click **Save**.
-3. Click the **"Invite the bot to a server"** link that appears, pick a server you manage, authorize - repeat per server you want Jarvis to see.
-4. Turn on the **Discord** plugin toggle.
+1. [discord.com/developers/applications](https://discord.com/developers/applications) → **New Application** → name it anything.
+2. **Bot** tab → **Add Bot** (or **Reset Token**) → copy the bot token.
+3. Still on that page, note the **Application ID** from the **General Information** tab.
+4. In the dashboard's Connections panel, paste the bot token into the Discord field (and its Application ID, if the field asks) and click **Save**.
+5. Click the **"Invite the bot to a server"** link that appears - pick a server you own/manage, authorize it. Repeat this step for each additional server you want Jarvis to see.
+6. Turn on the **Discord** plugin toggle.
 
 The bot is invited with read-only permissions (view channels, read message history) - no send/manage permissions requested.
 
 ### Notion (search shared pages/databases)
 
-Notion's own recommended approach for a personal tool - an internal integration token, not OAuth:
+Notion's own recommended approach for a personal tool - an "internal integration" token, not OAuth:
 
-1. [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration** → copy the **Internal Integration Secret**.
-2. In Notion, open each page/database you want Jarvis to search, **"..." → Connections**, add your integration - only what you explicitly connect this way is ever visible.
-3. Paste the secret into the Notion field in the Connections panel, click **Save**, turn on the **Notion** plugin toggle.
+1. [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration** → name it anything, pick your workspace.
+2. Copy the **Internal Integration Secret** it shows you.
+3. In Notion itself, open each page or database you want Jarvis to be able to search, click **"..." → Connections**, and add your integration - Notion only ever shares what you explicitly connect this way, nothing else in your workspace.
+4. In the dashboard's Connections panel, paste the secret into the Notion field and click **Save**.
+5. Turn on the **Notion** plugin toggle.
 
-### General
+## Changing the personality
 
-If a connected-account tool isn't connected yet when asked for, it says so plainly rather than pretending - see the anti-fabrication rule in the persona section above. Disconnect any of these any time from the Connections panel - it just deletes the stored token/secret locally; nothing needs undoing on the service's side unless you also want to revoke access from that service's own account settings.
+Edit the `SYSTEM` block in `backend/Modelfile`, then rebuild:
 
-## Why it's built this way
-
-- **Local-first**: the LLM, vision, memory, knowledge base, and face recognition all run on your own machine. The only things that ever leave it are: (a) browser-tab speech recognition, if you turn that on, (b) `edge-tts`'s network call to synthesize voice output, and (c) phone call audio, which is inherent to how phone calls work at all.
-- **The dashboard's own mic is opt-in, not automatic**: earlier testing found that with both the dashboard's browser-based recognition and the native listener active at once, the same spoken utterance could be transcribed slightly differently by each, producing two separate replies. Rather than trying to perfectly de-duplicate two independent speech engines, the simpler and more reliable fix was to make the redundant one opt-in.
-- **Browser Control reads structure before pixels**: the DOM/accessibility-style approach (reading buttons, links, and labels directly) is what the best-performing open-source browser-automation tools actually use today, not the heavier screenshot-plus-vision-model loop popularized by some past commercial browser agents - it's faster, needs no extra model, and works with an ordinary extension permission instead of Chrome's more sensitive debugger permission. The pixel fallback exists specifically for the pages where that approach has nothing to read.
-- **An explicit anti-fabrication rule in the persona**: early testing surfaced the model occasionally describing a browser action as having succeeded when the underlying tool had actually failed or wasn't connected - a fabricated success is worse than an honest failure, so the persona now has a direct, blanket instruction never to do this, for every tool, not just browser control.
-- **A resettable conversation history tied to toggle changes**: early testing found the model would sometimes keep insisting a capability was "off" even seconds after being turned on, because it was anchoring on what it said earlier in the same conversation. The fix wasn't a bigger prompt - flipping a toggle now clears the conversation history, since stale context about the old capability state was actively misleading the model.
-- **TeXML over raw Call Control**: Telnyx offers a lower-level, fully custom call-handling API (Call Control), and a higher-level Twilio-compatible one (TeXML). This project uses TeXML because its request/response shape (a webhook that returns simple XML instructions) is dramatically simpler to build against correctly than hand-rolling call-state management, at a small cost in flexibility this project doesn't need.
-- **Autonomous research kept as a separate addon, not core**: proactive background LLM calls conflict with the core project's rule that nothing runs or spends a token unless you asked for it in the moment - so that trade-off is opt-in and clearly labeled rather than a hidden default.
-- **No tool that can execute code or reach arbitrary network destinations, and only one that can act on your behalf**: the worst outcome of a bad or manipulated response is a wrong answer, a mis-triggered lock, a bogus memory entry, or an unwanted click/type in a browser tab you explicitly enabled it for - never control over the machine itself, and never something it can do without you having turned the relevant toggle on first.
-
-## Setup
-
-### Prerequisites
-
-- Windows 10/11
-- [Ollama](https://ollama.com) installed
-- Python 3.12 available via the `py` launcher
-- An NVIDIA GPU is strongly recommended (this was built and tested against an RTX 3090, see the resource-cost section above) - it'll run on CPU, just much slower
-- [ffmpeg](https://ffmpeg.org/download.html) installed and on your PATH (only needed for the video-summary feature)
-- A webcam, if you want Desk Guard or the "look through the camera" feature
-- Chrome, if you want Browser Control (it's a Chrome extension specifically)
-
-### 1. First run
-
-Just double-click `JARVIS.bat`. On first run it will:
-
-1. Create a Python virtual environment in `venv/`
-2. Install all dependencies from `backend/requirements.txt`
-3. Pull `hermes3` (~4.7GB) and `qwen2.5vl:7b` (~6GB) via Ollama, and build the `jarvis` persona from `backend/Modelfile`
-4. Register itself to start automatically at Windows login (a shortcut in your Startup folder - no admin rights needed)
-5. Start the tray app, which starts the backend, the native background listener, and opens the dashboard at `http://127.0.0.1:8765`
-
-After that, it starts on its own at every login.
-
-### 2. Using it
-
-Say "Jarvis" followed by anything - the native background listener runs automatically once the tray app is up, with no browser needed at all. If you also want the dashboard's own tab to listen (normally unnecessary), open it in **Chrome or Edge** and turn on "Also listen via this tab's mic" in Settings.
-
-If you have more than one microphone (or any virtual audio device like a voice-changer, a VR headset, or a streaming app), check `PREFERRED_DEVICE_NAMES` near the top of `backend/listener.py` and add your actual mic's name - Windows can silently make a virtual device the system default, which will make Jarvis unable to hear you at all.
-
-### 3. Turning on capabilities
-
-Everything beyond basic conversation is off until you turn it on, from the dashboard's Settings panel or the tray icon menu:
-
-| Toggle | What it does |
-|---|---|
-| Jarvis Enabled | Master switch for the whole assistant |
-| Also listen via this tab's mic | Off by default - lets this specific browser tab also listen, alongside the native listener |
-| Screen Access | Lets Jarvis take a screenshot and describe it, on request |
-| Camera Access | Lets Jarvis grab a webcam frame and describe it, on request |
-| Desk Guard | Webcam presence lock (see below) - requires enrolling your face first |
-| Calling | Lets Jarvis place outbound calls - requires phone setup below |
-| Call Notifications | Tells you about unanswered outbound calls |
-| Location | Three-state cycle: OFF → PC → PHONE → OFF |
-| Browser Control | Lets Jarvis act in your current browser tab - see the dedicated section above |
-| &nbsp;&nbsp;→ pixel-control fallback | Only visible once Browser Control is on - see above |
-| Code canvas | Lets Jarvis build and show a real live website/app preview - see the dedicated section above |
-| *(each installed plugin)* | Its own toggle appears automatically in the dashboard's **Plugins** panel and the tray menu - see Plugin system above |
-
-**Desk Guard**: click "Enroll my face" on the dashboard a few times (it captures reference photos over a few seconds each time), then turn the toggle on.
-
-### 4. Optional: phone calling setup
-
-This is the most involved part, since it wires together two external accounts. Take it slowly.
-
-**A. Get a Telnyx account and phone number**
-
-1. Sign up at [telnyx.com](https://telnyx.com) - self-service, no invite needed
-2. Go to **Numbers → Phone Numbers → Buy Numbers**, search by your area code, and buy a **Local** number with **Voice** and **SMS** capability
-3. If told to enable SMS on the number, note that US carriers require a quick one-time registration step (A2P 10DLC for local numbers) before texting works reliably - calling works immediately regardless
-
-**B. Get your API key**
-
-Go to your account menu (top-right) → **API Keys** → **Create API Key**. Copy it.
-
-**C. Get your Account SID**
-
-Either check `https://portal.telnyx.com/#/account/general`, or fetch it via the API (this is the reliable method - it's the `organization_id` field):
-
-```bash
-curl -s -H "Authorization: Bearer YOUR_API_KEY" https://api.telnyx.com/v2/api_keys
+```
+ollama create jarvis -f backend\Modelfile
 ```
 
-**D. Create an Outbound Voice Profile**
+## Changing the voice
 
-Go to **Voice → Outbound Voice Profiles → Create Profile**. Restrict allowed destinations to your own country, and set a low daily spend limit and channel limit (1-2) as a safety net. Note the profile's ID from the URL or the list page.
+`VOICE` in `backend/server.py` (default `en-GB-RyanNeural`). Other British options: `en-GB-ThomasNeural` (male), `en-GB-SoniaNeural` / `en-GB-LibbyNeural` (female).
 
-**E. Set up ngrok** (exposes your local server to Telnyx's webhooks)
+## Persistent memory
 
-1. Sign up free at [ngrok.com](https://ngrok.com), copy your authtoken from the dashboard
-2. `ngrok config add-authtoken YOUR_TOKEN`
-3. `ngrok http 8765` - copy the `https://....ngrok-free.app` (or `.dev`) URL it prints
-
-Note: the free tier gives you a new random URL every time you restart the tunnel, unless you claim the one free static domain ngrok's dashboard offers. Also note: some antivirus software (including Windows Defender) has been known to falsely flag ngrok's executable as a threat - if that happens, add a Defender exclusion for the folder you extracted it into (Settings → Virus & threat protection → Manage settings → Exclusions).
-
-**F. Create the TeXML application**
-
-Important: Telnyx's portal has a "Voice API Applications" wizard that actually creates a **Call Control Application**, not a TeXML one, even though the flow looks the same either way - this project needs the TeXML kind specifically. The reliable way to get one is via the API directly:
-
-```bash
-curl -X POST -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" \
-  -d '{
-    "friendly_name": "jarvis-texml",
-    "voice_url": "https://YOUR_NGROK_URL/api/telephony/voice",
-    "voice_method": "POST",
-    "active": true
-  }' \
-  https://api.telnyx.com/v2/texml_applications
-```
-
-Note the `"id"` field in the response - that's your Application SID. Attach the outbound voice profile from step D:
-
-```bash
-curl -X PATCH -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" \
-  -d '{"outbound":{"outbound_voice_profile_id":"YOUR_OVP_ID"}}' \
-  https://api.telnyx.com/v2/texml_applications/YOUR_APPLICATION_ID
-```
-
-**G. Point your phone number at the new application**
-
-Find your number's resource ID:
-
-```bash
-curl -s -H "Authorization: Bearer YOUR_API_KEY" https://api.telnyx.com/v2/phone_numbers
-```
-
-Then assign it:
-
-```bash
-curl -X PATCH -H "Authorization: Bearer YOUR_API_KEY" -H "Content-Type: application/json" \
-  -d '{"connection_id":"YOUR_APPLICATION_ID"}' \
-  https://api.telnyx.com/v2/phone_numbers/YOUR_PHONE_NUMBER_RESOURCE_ID
-```
-
-**H. Fill in the config**
-
-Copy `backend/telephony_config.example.json` to `backend/telephony_config.json` and fill in the six values you now have: `api_key`, `telnyx_number` (in `+1XXXXXXXXXX` format), `public_base_url` (your ngrok URL, no trailing slash), `account_sid`, `application_sid`, and `owner_number` (your own phone number - calling this one specifically gets Jarvis's normal persona instead of its third-party-caller persona).
-
-**I. Turn on the Calling toggle** and restart `JARVIS_TRAY.pyw`.
-
-Whenever your ngrok URL changes (every restart, unless you have a static domain), update both `telephony_config.json`'s `public_base_url` and the TeXML application's `voice_url` (via a PATCH request like step F) to match.
-
-### 5. Phone book
-
-Add contacts from the dashboard's Phone Book panel (name + number). Say "Jarvis, call `<name>`" to have it place a call - it will only ever call a number that's either in the phone book or spoken explicitly in the conversation.
-
-## Changing the personality or voice
-
-Edit the `SYSTEM` block in `backend/Modelfile`, then rebuild: `ollama create jarvis -f backend\Modelfile`.
-
-Voice: change `VOICE` in `backend/server.py` (default `en-GB-RyanNeural`). Run `edge-tts --list-voices` (inside the venv) to see every option.
+Facts Jarvis learns about you (via the `remember` tool, or by you asking it to remember something) are saved to `backend/memory/facts.json` — plain, human-readable/editable JSON. It's loaded into every conversation automatically. Delete entries any time by editing the file directly.
 
 ## Security notes
 
-- The server only binds to `127.0.0.1` - nothing on your network or the internet can reach it directly (phone calls reach it only via the ngrok tunnel you explicitly start).
-- Cross-origin requests to the backend are rejected by default; the one deliberate exception is the browser extension's own `chrome-extension://` origin, which cannot be forged by an ordinary malicious webpage.
-- Content pulled from the web is explicitly tagged as untrusted in the model's context, and the `remember` tool caps how much text one call can store, both reducing (not eliminating) prompt-injection risk from a malicious page.
-- No tool exists that executes arbitrary code or reaches arbitrary network destinations beyond read-only search/fetch, the phone system, and Browser Control's explicitly-scoped tab actions.
-- **Browser Control is the one deliberate exception to "read-only by default"**: once turned on, it can genuinely click and type in your current tab - submit forms, follow links, anything a real click could do. That's why it needs its own toggle, and why its riskiest fallback path needs a fresh on-screen "Allow" every single time, rather than being always-available like the other tools.
-- Desk Guard's lock action only ever locks; it has no unlock capability.
+- The server only ever binds to `127.0.0.1` (this machine only) — nothing on your network or the internet can reach it.
+- Cross-origin requests to the backend are rejected (blocks the classic "a malicious website open in another tab silently pokes your local AI" attack).
+- Content pulled from the web (search results, fetched pages) is explicitly tagged as untrusted in the model's context, and the `remember` tool caps how much text can be stored per fact — both reduce (not eliminate) the risk of a malicious webpage trying to plant instructions via prompt injection.
+- Jarvis has no tool that executes arbitrary code or writes arbitrary files. The worst a compromised or hallucinating response can do is say something wrong, mis-lock the desk, or write a bogus memory entry (visible and editable in `facts.json`) — it cannot take over the machine or act outside these specific tools.
+- Desk Guard's lock action only ever locks; it has no unlock capability, so it can't be turned into a way to keep you out.
+- **Browser Control is the one deliberate exception to "read-only by default"**: once you've turned it on and activated it on a specific tab, it can genuinely click and type there — submit forms, follow links, anything a real click could do. That's why it needs both a dedicated toggle and a fresh per-tab activation click before it can touch anything, rather than being always-available like the other tools.
 
 ## Known limitations - what it can't do, and what it might get wrong
 
-Worth reading before you rely on it for something that matters, based on things actually observed while building and testing this version:
+Worth reading before you rely on it for something that matters, based on things actually observed while building and testing this:
 
 - **Browser Control can't touch Chrome's own pages.** The New Tab page, `chrome://` pages, and the Chrome Web Store are hard-blocked from any extension acting on them - not a bug, not fixable, a Chrome security boundary. If it says it can't reach the page, check what tab is actually focused first.
 - **Canvas-drawn pages have no readable structure.** `browser_scan_page` finds nothing on pages built entirely on `<canvas>` (some games, some design tools) - the pixel fallback exists for exactly this, but it's slower and needs its own on-screen approval each time.
 - **Speech recognition isn't perfect.** The native listener occasionally mishears a word, especially with quiet or fast speech - this can make it act on a slightly wrong transcript. If something seems off, just say it again more clearly rather than assuming it's broken.
-- **Tool-calling reliability with a local model is good, not perfect.** Several real bugs were found and fixed while building this version - the model skipping a step it was told to always do, describing a browser action as done when it wasn't, needing a tool's own error message spelled out for it instead of acting on it directly. The persona has explicit rules against these now, and they hold up in testing, but a local 8B model won't have the same consistency as a much larger cloud model on every possible phrasing.
-- **Don't treat a spoken confirmation as proof for anything that actually matters.** For something consequential - a call you need to be certain went through, a form submission you need to be certain happened - verify directly (check your phone, look at the page yourself) rather than taking a confirmation as the last word, the same way you'd double-check anything else that's important enough to matter.
+- **Tool-calling reliability with a local model is good, not perfect.** Several real bugs were found and fixed during testing - the model skipping a step it was told to always do, describing a browser action as done when it wasn't, needing a tool's own error message spelled out for it instead of acting on it directly. The persona has explicit rules against these now, and they hold up in testing, but a local 8B model won't have the same consistency as a much larger cloud model on every possible phrasing.
+- **Don't treat a spoken confirmation as proof for anything that actually matters.** For something consequential - a call you need to be certain went through, a form submission you need to be certain happened - verify directly (check your phone, look at the page yourself) rather than taking "done, sir" as the last word, the same way you'd double-check anything else that's important enough to matter.
 - **Multi-window Chrome setups are less tested.** Browser Control tracks whichever tab you last switched to; with several separate Chrome windows open at once, which one it considers "current" hasn't been rigorously exercised.
-- **Desk Guard's face matching isn't a security system.** Lighting, glasses, and camera angle can all cause a false lock, or rarely, a false match.
+- **Desk Guard's face matching isn't a security system.** Lighting, glasses, and camera angle can all cause a false lock, or rarely, a false match - see the Desk Guard section above.
 
-## License
+## Not included (possible future add-ons)
 
-This project is released under a custom, plain-language **non-commercial** license - see [`LICENSE.md`](LICENSE.md) for the full text. In short: free to use, modify, and share forever; it may never be sold by anyone; and if it's used as the foundation of another project, or makes up 51% or more of one, that project is bound by the same no-selling rule too.
+- A premium TTS voice (e.g. ElevenLabs), free tier capped around 10k characters/month, in place of `edge-tts`.
+- Multi-user awareness — memory, the phone book, and conversation history are all global state, not per-person.
