@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import os
+import re
 import tempfile
 import time
 from contextlib import asynccontextmanager
@@ -205,6 +206,26 @@ def _access_status_block(cfg: dict) -> str:
     )
 
 
+_HTML_FENCE_RE = re.compile(r"```(?:html)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+_HTML_DOC_RE = re.compile(r"(<!DOCTYPE html.*?</html>|<html[\s>].*?</html>)", re.DOTALL | re.IGNORECASE)
+
+
+def _extract_embedded_html(text: str) -> str | None:
+    """Even with explicit instructions and the tool available, the model sometimes
+    describes/dumps a full HTML document as chat text instead of actually calling
+    write_canvas_code - when that happens the canvas silently never updates, and
+    worse, the raw markup would get read aloud verbatim by text-to-speech. This is
+    a safety net, not the primary path: salvage the HTML into the canvas anyway."""
+    for fence_match in _HTML_FENCE_RE.finditer(text):
+        candidate = fence_match.group(1).strip()
+        if re.search(r"<html[\s>]", candidate, re.IGNORECASE):
+            return candidate
+    doc_match = _HTML_DOC_RE.search(text)
+    if doc_match:
+        return doc_match.group(1).strip()
+    return None
+
+
 async def run_chat_turn(user_message: str, cfg: dict) -> str:
     conversation_history.append({"role": "user", "content": user_message})
 
@@ -213,6 +234,8 @@ async def run_chat_turn(user_message: str, cfg: dict) -> str:
     messages.insert(len(messages) - 1, status_msg)
 
     context_blocks = [memory.facts_as_prompt_block(), phonebook.as_prompt_block()]
+    if cfg.get("code_canvas_enabled"):
+        context_blocks.append(canvas_state.as_prompt_block())
     context_blocks = [b for b in context_blocks if b]
     if context_blocks:
         messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
@@ -273,6 +296,13 @@ async def chat(req: ChatRequest) -> ChatResponse:
     try:
         canvas_before = canvas_state.get_updated_at()
         reply_text = await run_chat_turn(req.message, cfg)
+
+        if cfg.get("code_canvas_enabled") and canvas_state.get_updated_at() == canvas_before:
+            embedded_html = _extract_embedded_html(reply_text)
+            if embedded_html:
+                canvas_state.set_content(embedded_html, canvas_state.get().get("title") or "")
+                reply_text = "I've updated the canvas - take a look."
+
         response = await _speak(reply_text)
         if canvas_state.get_updated_at() != canvas_before:
             canvas = canvas_state.get()
