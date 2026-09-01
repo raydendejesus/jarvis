@@ -1,6 +1,7 @@
 import base64
 import os
 import queue
+import re
 import site
 import tempfile
 import time
@@ -117,21 +118,52 @@ def _drain_queue() -> None:
             break
 
 
+def _levenshtein(a: str, b: str) -> int:
+    if len(a) < len(b):
+        a, b = b, a
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        curr = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + (ca != cb))
+        prev = curr
+    return prev[-1]
+
+
+# Whisper regularly mishears "Jarvis" as something close-but-not-exact
+# ("Jervis", "Jovis", "Jarvys"...) - requiring an exact substring match meant
+# a real, clearly-directed-at-Jarvis utterance would just silently get
+# dropped as if nothing was said at all. Fuzzy-matching each word against
+# "jarvis" (allowing a small edit distance) catches those near-misses while
+# a minimum word length keeps short unrelated words from matching by chance.
+_WAKE_WORD_RE = re.compile(r"[a-z']+")
+
+
+def _find_wake_word(lower: str) -> tuple[int, int] | None:
+    for match in _WAKE_WORD_RE.finditer(lower):
+        word = match.group()
+        if len(word) < 4:
+            continue
+        if _levenshtein(word, WAKE_WORD) <= 2:
+            return match.start(), match.end()
+    return None
+
+
 def _is_sleep_command(lower: str) -> bool:
     # A minor transcription slip (one wrong or missing word) is common enough
     # that requiring the exact phrase "night jarvis" made this fail silently
     # whenever the mic misheard even slightly - checking for both words
     # appearing anywhere, rather than as one exact substring, is far more
     # forgiving while still being clearly intentional rather than accidental.
-    return "night" in lower and WAKE_WORD in lower
+    return "night" in lower and _find_wake_word(lower) is not None
 
 
 def _extract_command(transcript: str) -> str | None:
     lower = transcript.lower()
-    idx = lower.find(WAKE_WORD)
-    if idx == -1:
+    span = _find_wake_word(lower)
+    if span is None:
         return None
-    return transcript[idx + len(WAKE_WORD):].strip(" ,.:!-")
+    return transcript[span[1]:].strip(" ,.:!-")
 
 
 def _transcribe(audio: np.ndarray) -> str:
