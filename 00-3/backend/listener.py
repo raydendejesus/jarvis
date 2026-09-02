@@ -33,6 +33,12 @@ MAX_UTTERANCE_SECONDS = 12
 MIN_UTTERANCE_SECONDS = 0.4
 AWAKE_WINDOW_SECONDS = 45
 WAKE_WORD = "jarvis"
+# Whisper has no reason to expect the name "Jarvis" and sometimes mishears it
+# as an unrelated real word ("drivers", "service") that's too far off for
+# fuzzy wake-word matching to catch at all - priming it with the name as an
+# initial_prompt biases its predictions toward recognizing it correctly,
+# a standard technique for known/expected vocabulary like a wake word.
+WHISPER_PROMPT = "Hey Jarvis, how can I help you today?"
 CHAT_URL = "http://127.0.0.1:8765/api/chat"
 LISTENER_EVENT_URL = "http://127.0.0.1:8765/api/listener/event"
 
@@ -171,7 +177,7 @@ def _transcribe(audio: np.ndarray) -> str:
     model = _get_whisper()
     audio_f32 = audio.astype(np.float32) / 32768.0
     try:
-        segments, _ = model.transcribe(audio_f32, language="en", beam_size=1)
+        segments, _ = model.transcribe(audio_f32, language="en", beam_size=1, initial_prompt=WHISPER_PROMPT)
         return " ".join(seg.text for seg in segments).strip()
     except RuntimeError as exc:
         # The GPU model can load successfully but still fail on the first real
@@ -179,7 +185,7 @@ def _transcribe(audio: np.ndarray) -> str:
         # fail this same way on every single utterance from now on.
         print(f"[listener] GPU transcription failed ({exc}), switching to CPU for future requests", flush=True)
         _whisper_model = _load_whisper_cpu()
-        segments, _ = _whisper_model.transcribe(audio_f32, language="en", beam_size=1)
+        segments, _ = _whisper_model.transcribe(audio_f32, language="en", beam_size=1, initial_prompt=WHISPER_PROMPT)
         return " ".join(seg.text for seg in segments).strip()
 
 
