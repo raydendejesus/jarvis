@@ -28,7 +28,12 @@ BLOCK_DURATION = 0.1
 BLOCK_SIZE = int(SAMPLE_RATE * BLOCK_DURATION)
 SILENCE_RMS_THRESHOLD = 500
 SPEECH_START_BLOCKS = 2
-SILENCE_END_BLOCKS = 9
+# 9 blocks (0.9s) was short enough that an ordinary mid-sentence pause -
+# thinking of a word, a stumble - regularly got read as "done talking,"
+# cutting the recording off mid-utterance and leaving Whisper to guess at
+# an incomplete clip. 1.6s tolerates a normal pause without feeling laggy
+# after a genuine sentence end.
+SILENCE_END_BLOCKS = 16
 MAX_UTTERANCE_SECONDS = 12
 MIN_UTTERANCE_SECONDS = 0.4
 AWAKE_WINDOW_SECONDS = 45
