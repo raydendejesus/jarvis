@@ -148,15 +148,40 @@ def _levenshtein(a: str, b: str) -> int:
 # a minimum word length keeps short unrelated words from matching by chance.
 _WAKE_WORD_RE = re.compile(r"[a-z']+")
 
+# Spelling it out letter by letter ("J. A. R. V. I. S.") is a deliberate,
+# unmistakable way to get through even when Whisper keeps mangling the word
+# as a whole - Whisper transcribes spelled-out letters as single characters
+# separated by spaces/punctuation, which the word-level fuzzy match above
+# can never catch (each letter is far too short to fuzzy-match on its own).
+_SPELLED_OUT_RE = re.compile(r"\bj\W*a\W*r\W*v\W*i\W*s\b")
+
+# "Wake up" as a second, independent wake phrase, requested as an
+# alternative to needing the name to land correctly at all - trades some
+# false-positive risk (it's a far more common phrase in ordinary speech/media
+# than "Jarvis") for a phrase Whisper has no trouble transcribing accurately.
+_ALT_WAKE_PHRASE_RE = re.compile(r"\bwake\s+up\b")
+
 
 def _find_wake_word(lower: str) -> tuple[int, int] | None:
+    candidates = []
+
+    spelled = _SPELLED_OUT_RE.search(lower)
+    if spelled:
+        candidates.append((spelled.start(), spelled.end()))
+
+    alt = _ALT_WAKE_PHRASE_RE.search(lower)
+    if alt:
+        candidates.append((alt.start(), alt.end()))
+
     for match in _WAKE_WORD_RE.finditer(lower):
         word = match.group()
-        if len(word) < 4:
-            continue
-        if _levenshtein(word, WAKE_WORD) <= 2:
-            return match.start(), match.end()
-    return None
+        if len(word) >= 4 and _levenshtein(word, WAKE_WORD) <= 2:
+            candidates.append((match.start(), match.end()))
+            break
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda span: span[0])
 
 
 def _is_sleep_command(lower: str) -> bool:
