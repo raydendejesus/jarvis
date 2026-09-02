@@ -22,6 +22,14 @@ a single .py file in that folder exposing some subset of:
                                   "no local model" or "~6 GB when used".
                                   Defaults to "no local model" if omitted -
                                   most plugins are just network calls.
+  on_disable() (callable, optional) - called right after this plugin's
+                                  toggle is switched off, for a plugin that
+                                  holds a real resource (a local GPU process
+                                  it launched, etc.) that needs to actually
+                                  stop, not just stop being called - "off"
+                                  should mean off, not idle-but-still-loaded.
+                                  Exceptions are caught and logged, never
+                                  allowed to break the toggle request itself.
 
 Dropping a well-formed file into plugins/ is the whole installation step - no
 core file needs editing. A plugin that fails to import is skipped with a
@@ -101,3 +109,17 @@ def dispatch_table() -> dict:
     for module in _loaded_plugins:
         merged.update(getattr(module, "DISPATCH", {}))
     return merged
+
+
+def call_on_disable(plugin_name: str) -> None:
+    module = next(
+        (m for m in _loaded_plugins if getattr(m, "PLUGIN_NAME", m.__name__.rsplit(".", 1)[-1]) == plugin_name),
+        None,
+    )
+    hook = getattr(module, "on_disable", None) if module else None
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception as exc:  # noqa: BLE001 - a resource-cleanup hook must never break the toggle request itself
+        print(f"[plugin_loader] on_disable failed for '{plugin_name}': {exc}", flush=True)

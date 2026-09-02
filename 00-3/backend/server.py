@@ -693,6 +693,8 @@ async def toggle_plugin(plugin_name: str, update: PluginToggle) -> dict:
     cfg = config_module.load_config()
     cfg[meta["config_key"]] = update.enabled
     config_module.save_config(cfg)
+    if not update.enabled:
+        plugin_loader.call_on_disable(plugin_name)
     # Same reasoning as ACCESS_KEYS_AFFECTING_HISTORY above - stale context
     # about a plugin's old on/off state shouldn't bias the next reply.
     conversation_history.clear()

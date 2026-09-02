@@ -146,6 +146,15 @@ def toggle_flag(key: str):
             return
         cfg[key] = new_value
         config_module.save_config(cfg)
+        if not new_value:
+            # This tray menu bypasses server.py's /api/plugins toggle endpoint
+            # entirely (writes config.json directly), so it needs its own call
+            # into the same resource-cleanup hook - otherwise a plugin holding
+            # a real GPU process only gets shut down when toggled off from the
+            # dashboard, not from here.
+            meta = next((m for m in plugin_loader.plugin_metadata() if m["config_key"] == key), None)
+            if meta:
+                plugin_loader.call_on_disable(meta["name"])
 
     return _toggle
 
