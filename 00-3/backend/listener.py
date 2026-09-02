@@ -100,8 +100,12 @@ def _get_whisper():
     if _whisper_model is None:
         from faster_whisper import WhisperModel
         try:
-            _whisper_model = WhisperModel("small.en", device="cuda", compute_type="float16")
-            print("[listener] Whisper loaded on GPU (cuda/float16)", flush=True)
+            # medium.en over small.en - a real, meaningful accuracy jump (especially
+            # for names/uncommon words like "Jarvis") for ~1.5GB VRAM instead of
+            # ~500MB, comfortably affordable on this GPU and nowhere near the scale
+            # of load that's actually triggered the display issue (full LLM inference).
+            _whisper_model = WhisperModel("medium.en", device="cuda", compute_type="float16")
+            print("[listener] Whisper loaded on GPU (cuda/float16, medium.en)", flush=True)
         except Exception as exc:
             print(f"[listener] GPU load failed ({exc}), falling back to CPU", flush=True)
             _whisper_model = _load_whisper_cpu()
@@ -177,7 +181,7 @@ def _transcribe(audio: np.ndarray) -> str:
     model = _get_whisper()
     audio_f32 = audio.astype(np.float32) / 32768.0
     try:
-        segments, _ = model.transcribe(audio_f32, language="en", beam_size=1, initial_prompt=WHISPER_PROMPT)
+        segments, _ = model.transcribe(audio_f32, language="en", beam_size=5, initial_prompt=WHISPER_PROMPT)
         return " ".join(seg.text for seg in segments).strip()
     except RuntimeError as exc:
         # The GPU model can load successfully but still fail on the first real
@@ -185,7 +189,7 @@ def _transcribe(audio: np.ndarray) -> str:
         # fail this same way on every single utterance from now on.
         print(f"[listener] GPU transcription failed ({exc}), switching to CPU for future requests", flush=True)
         _whisper_model = _load_whisper_cpu()
-        segments, _ = _whisper_model.transcribe(audio_f32, language="en", beam_size=1, initial_prompt=WHISPER_PROMPT)
+        segments, _ = _whisper_model.transcribe(audio_f32, language="en", beam_size=5, initial_prompt=WHISPER_PROMPT)
         return " ".join(seg.text for seg in segments).strip()
 
 
