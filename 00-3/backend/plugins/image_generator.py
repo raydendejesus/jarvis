@@ -45,7 +45,7 @@ CHECKPOINT_NAME = "v1-5-pruned-emaonly.safetensors"
 INPUT_DIR = COMFYUI_DIR / "ComfyUI" / "input"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "plugins_data" / "generated_images"
 
-STARTUP_TIMEOUT_SECONDS = 90
+STARTUP_TIMEOUT_SECONDS = 180
 GENERATION_TIMEOUT_SECONDS = 180
 
 NEGATIVE_PROMPT = "blurry, low quality, distorted, deformed, extra limbs, watermark, text, signature"
@@ -62,9 +62,12 @@ async def _is_comfyui_running() -> bool:
 
 async def _ensure_comfyui_running() -> bool:
     if await _is_comfyui_running():
+        print("[image_generator] ComfyUI already running", flush=True)
         return True
     if not COMFYUI_LAUNCH_BAT.exists():
+        print(f"[image_generator] launch script not found at {COMFYUI_LAUNCH_BAT}", flush=True)
         return False
+    print("[image_generator] ComfyUI not running - launching it now, this can take a while cold", flush=True)
     subprocess.Popen(
         ["cmd", "/c", str(COMFYUI_LAUNCH_BAT)],
         cwd=str(COMFYUI_DIR),
@@ -74,7 +77,9 @@ async def _ensure_comfyui_running() -> bool:
     while time.monotonic() < deadline:
         await asyncio.sleep(2)
         if await _is_comfyui_running():
+            print("[image_generator] ComfyUI is up", flush=True)
             return True
+    print(f"[image_generator] ComfyUI still not reachable after {STARTUP_TIMEOUT_SECONDS}s, giving up", flush=True)
     return False
 
 
@@ -187,14 +192,18 @@ async def generate_image(args: dict) -> str:
     reference_filename = None
     if reference_query:
         reference_filename = await _fetch_reference_image(reference_query)
+        print(f"[image_generator] reference photo: {reference_filename or 'none found'}", flush=True)
 
     if not await _ensure_comfyui_running():
         return "ComfyUI isn't running and I couldn't start it in time - it may need to be launched manually this once."
 
+    print(f"[image_generator] generating: {detailed_prompt!r}", flush=True)
     image_bytes = await _run_generation(_build_workflow(detailed_prompt, reference_filename))
     if image_bytes is None:
+        print("[image_generator] no image came back before the timeout", flush=True)
         return "ComfyUI didn't return an image in time - the generation may still be running, or it failed."
 
+    print("[image_generator] image generated successfully", flush=True)
     (OUTPUT_DIR / f"{stamp}.png").write_bytes(image_bytes)
     b64 = base64.b64encode(image_bytes).decode("ascii")
     canvas_state.set_content(
