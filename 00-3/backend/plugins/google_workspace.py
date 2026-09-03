@@ -25,6 +25,20 @@ NOT_CONNECTED_MSG = (
 )
 
 
+def _api_error_detail(resp: httpx.Response) -> str:
+    """A flat character-truncated dump of the raw error body cut off exactly
+    the part that mattered in practice (e.g. Google's own "enable this API
+    at <url>" link, past the 200-char mark) - extracting the actual message
+    field is both cleaner and doesn't risk losing the useful part."""
+    try:
+        message = resp.json().get("error", {}).get("message")
+        if message:
+            return message
+    except Exception:  # noqa: BLE001
+        pass
+    return resp.text[:300]
+
+
 async def _auth_headers() -> dict | None:
     token = await google_auth.get_valid_access_token()
     if token is None:
@@ -47,7 +61,7 @@ async def search_gmail(args: dict) -> str:
             headers=headers, params={"q": query, "maxResults": 5},
         )
         if resp.status_code != 200:
-            return f"Gmail search failed: {resp.status_code} {resp.text[:200]}"
+            return f"Gmail search failed: {resp.status_code} {_api_error_detail(resp)}"
         ids = [m["id"] for m in resp.json().get("messages", [])]
 
         if not ids:
@@ -115,7 +129,7 @@ async def list_calendar_events(args: dict) -> str:
             },
         )
         if resp.status_code != 200:
-            return f"Calendar lookup failed: {resp.status_code} {resp.text[:200]}"
+            return f"Calendar lookup failed: {resp.status_code} {_api_error_detail(resp)}"
         events = resp.json().get("items", [])
 
     if not events:
@@ -145,7 +159,7 @@ async def search_drive_files(args: dict) -> str:
             params={"q": f"name contains '{escaped}'", "pageSize": 10, "fields": "files(name,mimeType,modifiedTime,webViewLink)"},
         )
         if resp.status_code != 200:
-            return f"Drive search failed: {resp.status_code} {resp.text[:200]}"
+            return f"Drive search failed: {resp.status_code} {_api_error_detail(resp)}"
         files = resp.json().get("files", [])
 
     if not files:
@@ -170,7 +184,7 @@ async def create_google_slides(args: dict) -> str:
             headers=headers, json={"title": title},
         )
         if create_resp.status_code != 200:
-            return f"Couldn't create the presentation: {create_resp.status_code} {create_resp.text[:200]}"
+            return f"Couldn't create the presentation: {create_resp.status_code} {_api_error_detail(create_resp)}"
         presentation = create_resp.json()
         presentation_id = presentation["presentationId"]
         default_slide_id = presentation["slides"][0]["objectId"]
@@ -217,7 +231,7 @@ async def create_google_slides(args: dict) -> str:
         if update_resp.status_code != 200:
             return (
                 f"Created the presentation but couldn't fill in the slides: "
-                f"{update_resp.status_code} {update_resp.text[:300]}. The blank presentation is still here: {link}"
+                f"{update_resp.status_code} {_api_error_detail(update_resp)}. The blank presentation is still here: {link}"
             )
 
     return f"Created a {len(slides_content)}-slide presentation titled '{title}': {link}"
