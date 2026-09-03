@@ -561,9 +561,18 @@ async def call_phone_number(name_or_number: str, message: str = "") -> str:
         # The request may well have reached Telnyx and placed the call anyway -
         # a client-side timeout isn't proof the call itself failed, so don't
         # flatly claim it did.
+        print(f"[tools] call to {name_or_number} ({number}) timed out client-side", flush=True)
         return f"That took longer than expected, sir - the call to {name_or_number} may still be going through. Worth checking your phone."
-    except Exception as exc:  # noqa: BLE001 - surfaced back to the model as a spoken failure
+    except httpx.HTTPStatusError as exc:
+        # A failed call was previously only ever spoken aloud, never logged
+        # anywhere - made this genuinely undiagnosable after the fact. exc.response.text
+        # carries Telnyx's actual error detail, far more useful than the bare status code.
+        print(f"[tools] call to {name_or_number} ({number}) rejected by Telnyx: {exc.response.status_code} {exc.response.text}", flush=True)
         return f"The call to {name_or_number} genuinely failed to go through: {exc}"
+    except Exception as exc:  # noqa: BLE001 - surfaced back to the model as a spoken failure
+        print(f"[tools] call to {name_or_number} ({number}) failed: {exc!r}", flush=True)
+        return f"The call to {name_or_number} genuinely failed to go through: {exc}"
+    print(f"[tools] call to {name_or_number} ({number}) placed successfully", flush=True)
     return f"Calling {name_or_number} now, sir."
 
 
