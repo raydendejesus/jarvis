@@ -11,3 +11,5 @@
 **/known_faces/
 **/memory/facts.json
 **/billing.json
+**/connections/
+**/*_tokens.json
