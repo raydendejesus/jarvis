@@ -112,6 +112,13 @@ main {
   align-self: flex-start;
 }
 
+.canvas-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-self: flex-start;
+}
+
 .canvas-area {
   position: relative;
   width: 480px;
@@ -136,6 +143,22 @@ main {
   width: 100%;
   height: 100%;
   border: none;
+  display: block;
+}
+
+.model3d-frame-wrap {
+  width: 100%;
+  height: 420px;
+  background: #0a0f12;
+  border: 1px solid var(--cyan-dim);
+  border-radius: 4px;
+  box-shadow: 0 0 40px rgba(77, 227, 255, 0.1);
+  overflow: hidden;
+}
+
+.model3d-frame-wrap canvas {
+  width: 100%;
+  height: 100%;
   display: block;
 }
 

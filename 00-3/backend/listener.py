@@ -75,6 +75,14 @@ def _pick_input_device() -> int | None:
         print(f"[listener] could not query audio devices: {exc}", flush=True)
         return None
 
+    if config_module.load_config().get("vr_mode_enabled"):
+        # VR Mode (Virtual Desktop passes the Quest's own mic into Windows as
+        # a device this blocklist would normally reject - see BLOCKED_DEVICE_NAME_FRAGMENTS)
+        # trusts Windows' actual default unconditionally, since sir explicitly
+        # wants to talk through the headset's mic while in VR.
+        print(f"[listener] VR Mode is on - trusting Windows' default input device unconditionally: {default_input['name']}", flush=True)
+        return None
+
     default_name = (default_input.get("name") or "").lower()
     if not any(bad in default_name for bad in BLOCKED_DEVICE_NAME_FRAGMENTS):
         print(f"[listener] using Windows' default input device: {default_input['name']}", flush=True)

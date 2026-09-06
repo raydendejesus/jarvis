@@ -17,17 +17,13 @@ Two things sir specifically asked for beyond "just call ComfyUI":
    rather than generating purely from a text description of something it's
    never actually seen.
 """
-import asyncio
 import base64
 import random
-import subprocess
-import time
-import uuid
 from datetime import datetime
 from pathlib import Path
 
-import httpx
-
+import config as config_module
+import comfyui_shared
 import canvas_state
 
 PLUGIN_NAME = "image_generator"
@@ -36,80 +32,10 @@ CONFIG_KEY = "image_generator_enabled"
 ENABLED_BY_DEFAULT = False
 VRAM_COST = "~4-6 GB while actively generating (Stable Diffusion 1.5) - ComfyUI is not kept running when off"
 
-COMFYUI_DIR = Path(r"O:\ComfyUI\ComfyUI_windows_portable")
-COMFYUI_LAUNCH_BAT = COMFYUI_DIR / "run_nvidia_gpu.bat"
-COMFYUI_PORT = 8188
-COMFYUI_URL = f"http://127.0.0.1:{COMFYUI_PORT}"
 CHECKPOINT_NAME = "v1-5-pruned-emaonly.safetensors"
-
-INPUT_DIR = COMFYUI_DIR / "ComfyUI" / "input"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "plugins_data" / "generated_images"
 
-STARTUP_TIMEOUT_SECONDS = 180
-GENERATION_TIMEOUT_SECONDS = 180
-
 NEGATIVE_PROMPT = "blurry, low quality, distorted, deformed, extra limbs, watermark, text, signature"
-
-
-async def _is_comfyui_running() -> bool:
-    try:
-        async with httpx.AsyncClient(timeout=2) as client:
-            resp = await client.get(f"{COMFYUI_URL}/system_stats")
-            return resp.status_code == 200
-    except Exception:  # noqa: BLE001
-        return False
-
-
-async def _ensure_comfyui_running() -> bool:
-    if await _is_comfyui_running():
-        print("[image_generator] ComfyUI already running", flush=True)
-        return True
-    if not COMFYUI_LAUNCH_BAT.exists():
-        print(f"[image_generator] launch script not found at {COMFYUI_LAUNCH_BAT}", flush=True)
-        return False
-    print("[image_generator] ComfyUI not running - launching it now, this can take a while cold", flush=True)
-    subprocess.Popen(
-        ["cmd", "/c", str(COMFYUI_LAUNCH_BAT)],
-        cwd=str(COMFYUI_DIR),
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
-    deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        await asyncio.sleep(2)
-        if await _is_comfyui_running():
-            print("[image_generator] ComfyUI is up", flush=True)
-            return True
-    print(f"[image_generator] ComfyUI still not reachable after {STARTUP_TIMEOUT_SECONDS}s, giving up", flush=True)
-    return False
-
-
-async def _fetch_reference_image(query: str) -> str | None:
-    """Downloads the first usable image result straight into ComfyUI's own
-    input/ folder (where its LoadImage node reads by filename) - honestly
-    returns None on any failure rather than pretending a reference was used."""
-    try:
-        from ddgs import DDGS
-        results = await asyncio.to_thread(lambda: list(DDGS().images(query, max_results=5)))
-    except Exception:  # noqa: BLE001
-        return None
-
-    for result in results:
-        url = result.get("image")
-        if not url:
-            continue
-        try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-                resp.raise_for_status()
-            if not resp.headers.get("content-type", "").startswith("image/"):
-                continue
-            filename = f"ref_{uuid.uuid4().hex}.jpg"
-            INPUT_DIR.mkdir(parents=True, exist_ok=True)
-            (INPUT_DIR / filename).write_bytes(resp.content)
-            return filename
-        except Exception:  # noqa: BLE001
-            continue
-    return None
 
 
 def _build_workflow(prompt: str, reference_filename: str | None) -> dict:
@@ -151,31 +77,15 @@ def _build_workflow(prompt: str, reference_filename: str | None) -> dict:
 
 
 async def _run_generation(workflow: dict) -> bytes | None:
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow, "client_id": uuid.uuid4().hex})
-        resp.raise_for_status()
-        prompt_id = resp.json()["prompt_id"]
-
-    deadline = time.monotonic() + GENERATION_TIMEOUT_SECONDS
-    async with httpx.AsyncClient(timeout=15) as client:
-        while time.monotonic() < deadline:
-            hist_resp = await client.get(f"{COMFYUI_URL}/history/{prompt_id}")
-            history = hist_resp.json()
-            if prompt_id in history:
-                for node_output in history[prompt_id].get("outputs", {}).values():
-                    for img in node_output.get("images", []):
-                        img_resp = await client.get(
-                            f"{COMFYUI_URL}/view",
-                            params={
-                                "filename": img["filename"],
-                                "subfolder": img.get("subfolder", ""),
-                                "type": img.get("type", "output"),
-                            },
-                        )
-                        img_resp.raise_for_status()
-                        return img_resp.content
-                return None
-            await asyncio.sleep(2)
+    prompt_id = await comfyui_shared.submit_workflow(workflow)
+    outputs = await comfyui_shared.wait_for_history(prompt_id)
+    if outputs is None:
+        return None
+    for node_output in outputs.values():
+        for img in node_output.get("images", []):
+            return await comfyui_shared.fetch_output_file(
+                img["filename"], img.get("subfolder", ""), img.get("type", "output")
+            )
     return None
 
 
@@ -191,10 +101,10 @@ async def generate_image(args: dict) -> str:
 
     reference_filename = None
     if reference_query:
-        reference_filename = await _fetch_reference_image(reference_query)
+        reference_filename = await comfyui_shared.fetch_reference_image(reference_query, "image_generator")
         print(f"[image_generator] reference photo: {reference_filename or 'none found'}", flush=True)
 
-    if not await _ensure_comfyui_running():
+    if not await comfyui_shared.ensure_running("image_generator"):
         return "ComfyUI isn't running and I couldn't start it in time - it may need to be launched manually this once."
 
     print(f"[image_generator] generating: {detailed_prompt!r}", flush=True)
@@ -219,30 +129,9 @@ async def generate_image(args: dict) -> str:
 
 
 def on_disable() -> None:
-    """'Off' has to mean off - ComfyUI is a real GPU process, not just a tool
-    Jarvis stops calling. Kills whatever's listening on ComfyUI's port,
-    regardless of whether this process or a manual launch started it."""
-    try:
-        result = subprocess.run(
-            ["netstat", "-ano"], capture_output=True, text=True, timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-    except Exception:  # noqa: BLE001
-        return
-
-    pids = set()
-    for line in result.stdout.splitlines():
-        if f":{COMFYUI_PORT} " in line and "LISTENING" in line:
-            pids.add(line.split()[-1])
-
-    for pid in pids:
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", pid], capture_output=True, timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except Exception:  # noqa: BLE001
-            pass
+    comfyui_shared.shutdown_if_unneeded(
+        config_module.load_config(), CONFIG_KEY, ["model_3d_generator_enabled"]
+    )
 
 
 SCHEMAS = [

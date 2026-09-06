@@ -94,6 +94,37 @@ async function pollCanvasForUpdates() {
   }
 }
 
+function showModel3D(filename, title) {
+  if (window.Model3DViewer) window.Model3DViewer.load(`/3d_models/${filename}`, title);
+}
+
+let lastSeenModel3DUpdatedAt = null;
+
+async function loadModel3DOnStartup() {
+  try {
+    const resp = await fetch("/api/3d_model");
+    const data = await resp.json();
+    lastSeenModel3DUpdatedAt = data.updated_at || null;
+    if (data.filename) showModel3D(data.filename, data.title);
+  } catch (err) {
+    console.error("Failed to load 3D model:", err);
+  }
+}
+
+async function pollModel3DForUpdates() {
+  try {
+    const resp = await fetch("/api/3d_model");
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.filename && data.updated_at && data.updated_at !== lastSeenModel3DUpdatedAt) {
+      lastSeenModel3DUpdatedAt = data.updated_at;
+      showModel3D(data.filename, data.title);
+    }
+  } catch (err) {
+    // best-effort background poll - never worth surfacing a network hiccup here
+  }
+}
+
 let lastSeenListenerSeq = 0;
 
 // Mirrors listener.py's phase reports (see server.py's /api/listener/event)
@@ -289,7 +320,7 @@ function initRecognition() {
   }
 }
 
-const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled"];
+const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled", "vr_mode_enabled"];
 
 function setIndicator(key, active) {
   const el = document.getElementById(`ind-${key}`);
@@ -933,6 +964,7 @@ initPhoneBookPanel();
 loadPlugins();
 loadConnections();
 loadCanvasOnStartup();
+loadModel3DOnStartup();
 checkConnectionRedirectResult();
 tickClock();
 setInterval(tickClock, 1000);
@@ -943,3 +975,4 @@ fetch("/api/listener/event")
   .catch(() => {});
 setInterval(pollListenerStatus, 800);
 setInterval(pollCanvasForUpdates, 4000);
+setInterval(pollModel3DForUpdates, 4000);

@@ -21,6 +21,7 @@ import github_auth
 import google_auth
 import location
 import memory
+import model3d_state
 import notion_auth
 import phonebook
 import plugin_loader
@@ -145,6 +146,7 @@ class SettingsUpdate(BaseModel):
     browser_control_enabled: bool | None = None
     browser_pixel_fallback_enabled: bool | None = None
     code_canvas_enabled: bool | None = None
+    vr_mode_enabled: bool | None = None
 
 
 async def synthesize(text: str) -> bytes:
@@ -316,6 +318,11 @@ async def chat(req: ChatRequest) -> ChatResponse:
 @app.get("/api/canvas")
 async def get_canvas() -> dict:
     return canvas_state.get()
+
+
+@app.get("/api/3d_model")
+async def get_3d_model() -> dict:
+    return model3d_state.get()
 
 
 class ListenerEvent(BaseModel):
@@ -861,6 +868,10 @@ async def notion_disconnect() -> dict:
     notion_auth.disconnect()
     return {"ok": True}
 
+
+GENERATED_3D_MODELS_DIR = Path(__file__).resolve().parent / "plugins_data" / "generated_3d_models"
+GENERATED_3D_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/3d_models", StaticFiles(directory=GENERATED_3D_MODELS_DIR), name="3d_models")
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 

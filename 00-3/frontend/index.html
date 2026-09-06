@@ -106,6 +106,13 @@
           Lets Jarvis build a real, live website/app/demo and show it in a preview panel when you
           ask - "build me a website for X." Rendered sandboxed, with no access to this dashboard.
         </p>
+        <label class="switch-row"><span>VR Mode</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-vr_mode_enabled" /><span class="switch"></span></label>
+        <p class="hint-text">
+          For viewing this dashboard in a VR headset via Virtual Desktop: trusts the headset's own
+          microphone (normally blocked, since it's usually a sign the real default mic got silently
+          swapped for a virtual one). Turn this on before putting the headset on, off when done -
+          requires restarting Jarvis to take effect either way.
+        </p>
         <p id="settingsError" class="hint-text error"></p>
       </div>
 
@@ -147,17 +154,38 @@
 
   <div class="col-divider"></div>
 
-  <aside class="canvas-area" id="canvasPanel" hidden>
-    <h2 class="side-heading">Canvas <span id="canvasTitle" class="side-count"></span></h2>
-    <div class="canvas-frame-wrap">
-      <iframe id="canvasFrame" sandbox="allow-scripts" title="Jarvis canvas preview"></iframe>
-    </div>
-    <p class="hint-text">
-      Live preview of a page Jarvis builds when asked to make a website, app, or visual demo -
-      sandboxed, no access to this dashboard or your real browser.
-    </p>
-  </aside>
+  <div class="canvas-column">
+    <aside class="canvas-area" id="canvasPanel" hidden>
+      <h2 class="side-heading">Canvas <span id="canvasTitle" class="side-count"></span></h2>
+      <div class="canvas-frame-wrap">
+        <iframe id="canvasFrame" sandbox="allow-scripts" title="Jarvis canvas preview"></iframe>
+      </div>
+      <p class="hint-text">
+        Live preview of a page Jarvis builds when asked to make a website, app, or visual demo -
+        sandboxed, no access to this dashboard or your real browser.
+      </p>
+    </aside>
+
+    <aside class="canvas-area model3d-area" id="model3dPanel" hidden>
+      <h2 class="side-heading">3D Canvas <span id="model3dTitle" class="side-count"></span></h2>
+      <div class="model3d-frame-wrap">
+        <canvas id="model3dCanvas"></canvas>
+      </div>
+      <p class="hint-text">
+        Live preview of a 3D model Jarvis generates when asked - drag to orbit, scroll to zoom.
+      </p>
+    </aside>
   </div>
-  <script src="app.js"></script>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="model3d-viewer.js"></script>
+  <script src="app.js" defer></script>
 </body>
 </html>

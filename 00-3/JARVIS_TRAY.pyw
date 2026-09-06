@@ -241,6 +241,7 @@ def main() -> None:
         pystray.MenuItem(location_mode_label, cycle_location_mode),
         pystray.MenuItem("Browser Control", toggle_flag("browser_control_enabled"), checked=flag_checked("browser_control_enabled")),
         pystray.MenuItem("  -> allow pixel-control fallback", toggle_flag("browser_pixel_fallback_enabled"), checked=flag_checked("browser_pixel_fallback_enabled")),
+        pystray.MenuItem("VR Mode (trust headset mic)", toggle_flag("vr_mode_enabled"), checked=flag_checked("vr_mode_enabled")),
     ]
 
     plugin_toggles = [m for m in plugin_loader.plugin_metadata() if not m["always_on"]]
