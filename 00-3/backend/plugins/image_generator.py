@@ -22,7 +22,6 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-import config as config_module
 import comfyui_shared
 import canvas_state
 
@@ -89,6 +88,15 @@ async def _run_generation(workflow: dict) -> bytes | None:
     return None
 
 
+async def generate_plain_image(prompt: str) -> bytes | None:
+    """Public reuse hook for model_3d_generator.py: Trellis2/Pixal3D is
+    image-to-3D only (no text conditioning at all), so a request with no
+    reference photo needs a starting image synthesized first - this is the
+    exact same SD1.5 txt2img path generate_image itself uses, just without
+    saving to the canvas."""
+    return await _run_generation(_build_workflow(prompt, None))
+
+
 async def generate_image(args: dict) -> str:
     detailed_prompt = (args.get("detailed_prompt") or "").strip()
     if not detailed_prompt:
@@ -129,9 +137,7 @@ async def generate_image(args: dict) -> str:
 
 
 def on_disable() -> None:
-    comfyui_shared.shutdown_if_unneeded(
-        config_module.load_config(), CONFIG_KEY, ["model_3d_generator_enabled"]
-    )
+    comfyui_shared.shutdown_if_unneeded(CONFIG_KEY, ["model_3d_generator_enabled"])
 
 
 SCHEMAS = [

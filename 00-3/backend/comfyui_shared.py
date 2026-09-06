@@ -119,10 +119,18 @@ async def fetch_output_file(filename: str, subfolder: str, file_type: str) -> by
         return resp.content
 
 
-def shutdown_if_unneeded(config: dict, my_config_key: str, sibling_config_keys: list[str]) -> None:
+def shutdown_if_unneeded(my_config_key: str, sibling_config_keys: list[str]) -> None:
     """'Off' has to mean off - ComfyUI is a real GPU process, not just a tool
     Jarvis stops calling. Only actually kills it if no OTHER ComfyUI-dependent
-    plugin is still enabled, since two plugins can share the same instance."""
+    plugin is still enabled, since two plugins can share the same instance.
+
+    Imports config locally rather than at module level - config.py imports
+    plugin_loader, which imports every plugin (including this module's
+    callers) at plugin-discovery time, so a top-level import here would be
+    circular depending on which module happens to get imported first."""
+    import config as config_module
+    config = config_module.load_config()
+
     if any(config.get(key) for key in sibling_config_keys):
         print(f"[comfyui_shared] {my_config_key} disabled, but another ComfyUI-dependent plugin is still on - leaving it running", flush=True)
         return
