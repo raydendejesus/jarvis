@@ -1,10 +1,35 @@
 # Echo-5 (cleaned up)
 
-> **Echo-5 is echo-4, cleaned up and made lighter.** Nothing was removed, nothing was added and nothing was changed:
-> same brain model (`hermes3`), same Whisper size, same toggles, same behavior. It simply loads less,
-> re-reads less and wastes less - the right pick for a smaller or older machine. Everything below the
-> line is the unchanged echo-4 documentation.
-> See [how Echo-5 compares to every earlier version](#how-echo-5-compares-to-every-earlier-version).
+> **Echo-5 is the clean-up release.** It was meant to run smoother, faster and better - and to be less
+> bloated than the versions before it - while keeping every ability they had and every new one added
+> since. It is echo-4 cleaned up and made lighter: nothing was removed, and it uses the same brain model
+> (`hermes3`), the same Whisper size and the same toggles, so it behaves the same with less weight and
+> less wasted work. That makes it the right pick for a smaller or older machine. Everything below the
+> comparison is the unchanged echo-4 documentation.
+>
+> See [how Echo-5 compares to every earlier version](#how-echo-5-compares-to-every-earlier-version) for the
+> measured numbers.
+
+## What this release is for
+
+Echo-5 was built as a **clean-up**: the same assistant, doing everything the earlier versions did and everything
+that was added since, but running **smoother, faster, better and less bloated** than all of them.
+
+- **Less bloated** - the server uses about a quarter less memory than echo-4 (83 MB -> 63 MB running) and is even
+  lighter than 00-1, which did about a seventh as much. Heavy libraries load only when something actually needs them,
+  and the brain and vision models unload when idle.
+- **Faster** - the server loads about 19% quicker, the launcher starts about a second faster, the dashboard no longer
+  fetches the 3D viewer unless there is a model, and phone replies dropped from about 1.8 s to about 0.7 s (the hello
+  is instant because it is rendered before the call is placed).
+- **Smoother** - no single reply can hold everyone else up (replies are bounded), a caller hanging up stops the work at
+  once, a second caller or your own voice command no longer waits behind a call's reply, and there is an optional
+  "two replies at once" switch.
+- **Better** - the same dashboard, the same toggles, the same behavior, plus the fixes that came out of measuring it.
+- **Same abilities, plus the new ones** - everything from 00-1 through echo-4 is still here (43 tools, 12 plugins,
+  24 toggles), including the newer abilities: opening apps and Steam games, Spotify, shortcuts, per-contact call access,
+  Sir Page and the rest. Nothing was taken out to make it lighter.
+
+The phone-speed and smoothness fixes are shared with echo-4; the memory and load-time savings are Echo-5's own.
 
 ## What was compressed or smushed
 

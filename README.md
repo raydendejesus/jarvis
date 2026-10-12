@@ -22,7 +22,7 @@ The project is renamed from **Jarvis** to **Echo** - this is the Echo-4 edition 
 
 ## [`echo-5/`](echo-5/) - Echo-5, cleaned up
 
-echo-4 with nothing removed, added or changed - same model, same toggles, same behavior - but loading less and re-reading less so it runs on a smaller machine: the server process loads in about 37 MB instead of 55 MB and uses about 23% less resident memory, and the launcher, dashboard and phone state do less wasted work. See its README for the full list of what was compressed.
+The clean-up release. It was meant to run smoother, faster and better - and to be less bloated than every version before it - while keeping all of their abilities and the new ones. Same model, same toggles, same behavior as echo-4, but the server loads in about 57 MB instead of 76 MB and uses about 24% less memory running, loads and replies faster, and no reply can hold everyone else up. Its README has the measured comparison with every earlier version.
 
 ## Which one should I run?
 
