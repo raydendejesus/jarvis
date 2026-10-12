@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+edge-tts
+httpx
+python-multipart
+mss
+opencv-python
+insightface
+onnxruntime
+ddgs
+beautifulsoup4
+pystray
+pillow
+sounddevice
+faster-whisper
+pygame

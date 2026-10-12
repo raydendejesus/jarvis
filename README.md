@@ -2,7 +2,7 @@
 
 A local, self-hosted AI assistant - a real LLM as the brain (running on your own GPU via Ollama), a natural voice, wake-word listening, memory, and increasingly, real-world capability, all without a cloud AI subscription.
 
-This repo holds three successive versions of the project side by side, each in its own folder, so the progression is visible rather than hidden behind force-pushed history. Each version is a complete, independently-runnable copy with its own README - pick the one you actually want to run (almost certainly the newest), or read through all three to see how it evolved.
+This repo holds four successive versions of the project side by side, each in its own folder, so the progression is visible rather than hidden behind force-pushed history. Each version is a complete, independently-runnable copy with its own README - pick the one you actually want to run (almost certainly the newest), or read through all four to see how it evolved.
 
 ## [`00-1/`](00-1/) - the original
 
@@ -16,10 +16,14 @@ Swapped the brain to Hermes 3 (less restrictive for a personal assistant's every
 
 Everything from 00-2, plus the ability to act inside your browser: a Chrome extension gives Jarvis his own on-screen cursor that can click, type, scroll, and read whatever page you're currently viewing, only when you ask him to. Reads a page's real structure rather than taking screenshots, so it needs no extra VRAM for the normal case, with a pixel-based fallback (behind its own toggle and an on-screen warning) for pages that don't have any readable structure at all. Also introduces a real plugin system - drop a `.py` file into `backend/plugins/` and it's auto-discovered, no core file editing required, toggle and all - with a working expense tracker (`billing_tracker.py`) as the reference example, plus a real OAuth "Connect Google Account" flow (Gmail/Calendar/Drive, read-only) as a second example of a plugin that needs an external account rather than just a local file. Plugins, browser control, and screen/camera access are all dashboard-only by construction; phone calls use a small fixed tool list that never touches any of them. Also adds persona-level rules against fabricating tool results or invented tool *inputs* - both were caught happening during testing and explicitly fixed.
 
+## [`echo-4/`](echo-4/) - renamed to Echo
+
+The project is renamed from **Jarvis** to **Echo**. Everything from 00-3, with a neutral-and-green dashboard palette and "Echo" as the new wake word - the original wake word "Jarvis" still works alongside it. Launcher files are `ECHO.bat` / `ECHO_TRAY.pyw` and the persona model is `echo`.
+
 ## Which one should I run?
 
-00-3, unless you have a specific reason to want an earlier version's exact behavior. Each version's own README has full setup instructions - go to [`00-3/README.md`](00-3/README.md) and start there.
+`echo-4`, unless you have a specific reason to want an earlier version's exact behavior. Each version's own README has full setup instructions - go to [`echo-4/README.md`](echo-4/README.md) and start there.
 
 ## License
 
-All three versions share the same license - see [`00-3/LICENSE.md`](00-3/LICENSE.md) (00-1 uses no formal license file; treat 00-2 and 00-3's terms as the project's intent throughout). In short: free to use, modify, and share forever; it may never be sold by anyone; and if it's used as the foundation of another project, or makes up 51% or more of one, that project is bound by the same no-selling rule too.
+All four versions share the same license - see [`00-3/LICENSE.md`](00-3/LICENSE.md) (00-1 uses no formal license file; treat 00-2 and 00-3's terms as the project's intent throughout). In short: free to use, modify, and share forever; it may never be sold by anyone; and if it's used as the foundation of another project, or makes up 51% or more of one, that project is bound by the same no-selling rule too.

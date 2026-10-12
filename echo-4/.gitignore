@@ -1,0 +1,23 @@
+# Python virtual environment (recreated by ECHO.bat)
+venv/
+__pycache__/
+*.pyc
+
+# Runtime logs
+*.log
+
+# Real secrets and personal data - never commit these
+backend/telephony_config.json
+backend/config.json
+backend/phonebook.json
+backend/memory/
+backend/security/
+backend/knowledge/
+backend/plugins_data/billing.json
+backend/plugins_data/generated_images/
+backend/plugins_data/generated_3d_models/
+backend/google_oauth_config.json
+backend/github_oauth_config.json
+backend/connections/
+backend/canvas_state.json
+backend/model3d_state.json

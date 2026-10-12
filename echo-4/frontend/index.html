@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="clock" id="clock">--:--:--</div>
+
+  <div class="layout">
+  <aside class="phonebook-area" id="phoneBookPanel">
+    <h2 class="side-heading">Phone Book <span id="pbCount" class="side-count"></span></h2>
+    <form id="phoneBookForm" class="phonebook-form">
+      <label class="field-line">
+        <span class="field-label">name:</span>
+        <input type="text" id="pbName" required />
+      </label>
+      <label class="field-line">
+        <span class="field-label">number:</span>
+        <input type="tel" id="pbNumber" placeholder="+1 555 123 4567" required />
+      </label>
+      <button type="submit" class="hud-btn">Add</button>
+    </form>
+    <ul id="phoneBookList" class="phonebook-list"></ul>
+    <p class="hint-text">
+      Say "Echo, call &lt;name&gt;" to have Echo place a call to a saved contact.
+      Only numbers listed here (or ones you say directly) can be called - Echo
+      won't dial anyone not named here or given explicitly.
+    </p>
+  </aside>
+
+  <div class="col-divider"></div>
+
+  <main>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div class="status-strip">
+      <span class="indicator" id="ind-ai_enabled" data-label="AI">AI</span>
+      <span class="indicator" id="ind-screen_access" data-label="SCR">SCR</span>
+      <span class="indicator" id="ind-camera_access" data-label="CAM">CAM</span>
+      <span class="indicator" id="ind-desk_guard_enabled" data-label="GRD">GRD</span>
+      <span class="indicator" id="ind-calling_enabled" data-label="CALL">CALL</span>
+      <span class="indicator" id="ind-call_notifications_enabled" data-label="NOTIFY">NOTIFY</span>
+      <span class="indicator" id="ind-location_mode" data-label="LOC">LOC: OFF</span>
+      <span class="indicator" id="ind-browser_control_enabled" data-label="BRWS">BRWS</span>
+      <span class="indicator" id="ind-code_canvas_enabled" data-label="CODE">CODE</span>
+    </div>
+
+    <h1 class="brand">J.A.R.V.I.S.</h1>
+
+    <div id="core" class="core">
+      <div class="ring ring-dashed"></div>
+      <div class="ring ring2"></div>
+      <div class="ring ring3 ring-dashed"></div>
+    </div>
+    <div id="status">Initializing...</div>
+    <div id="log"></div>
+
+    <div class="controls">
+      <label class="hud-btn">
+        Attach photo / video
+        <input type="file" id="fileInput" accept="image/*,video/*" hidden />
+      </label>
+      <button id="enrollBtn" class="hud-btn" type="button">Enroll my face</button>
+      <span id="enrollResult" class="hint-text"></span>
+    </div>
+
+    <div class="control-panel">
+      <div class="tab-bar" role="tablist">
+        <button type="button" class="tab-btn active" data-tab="settings">Settings</button>
+        <button type="button" class="tab-btn" data-tab="plugins">Plugins</button>
+        <button type="button" class="tab-btn" data-tab="connections">Connections</button>
+        <button type="button" class="tab-btn" data-tab="audio">Audio</button>
+      </div>
+
+      <div class="tab-panel" id="tab-settings">
+        <label class="switch-row"><span>Echo enabled</span><input type="checkbox" id="toggle-ai_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Also listen via this tab's mic</span><input type="checkbox" id="toggle-dashboard-mic" /><span class="switch"></span></label>
+        <p class="hint-text">Off by default - the always-on background listener already hears you, so leaving both on can make Echo answer twice from two slightly different transcriptions of the same thing.</p>
+        <label class="switch-row"><span>Screen access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-screen_access" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Camera access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-camera_access" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Desk Guard</span><span class="vram-tag">&lt;1 GB</span><input type="checkbox" id="toggle-desk_guard_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Calling</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-calling_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Unanswered-call notifications</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-call_notifications_enabled" /><span class="switch"></span></label>
+        <button type="button" id="toggle-location_mode" class="hud-btn location-cycle-btn">Location: OFF (click to change)</button>
+        <p class="hint-text">Click cycles OFF &rarr; PC &rarr; PHONE &rarr; OFF. Only the device matching the current mode shares its position. No local model.</p>
+        <label class="switch-row"><span>Browser control</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-browser_control_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>&nbsp;&nbsp;&rarr; allow direct screen-control fallback</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-browser_pixel_fallback_enabled" /><span class="switch"></span></label>
+        <p class="hint-text">
+          Browser control lets Echo click and type in your active browser tab through his own
+          on-screen cursor when you ask him to - it never touches your real mouse. The fallback
+          below it takes direct pixel-level control for pages it can't otherwise read (reusing
+          the same vision model as Screen/Camera access), and always shows an on-screen warning
+          you must approve first.
+        </p>
+        <label class="switch-row"><span>Code canvas</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-code_canvas_enabled" /><span class="switch"></span></label>
+        <p class="hint-text">
+          Lets Echo build a real, live website/app/demo and show it in a preview panel when you
+          ask - "build me a website for X." Rendered sandboxed, with no access to this dashboard.
+        </p>
+        <label class="switch-row"><span>VR Mode</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-vr_mode_enabled" /><span class="switch"></span></label>
+        <p class="hint-text">
+          For viewing this dashboard in a VR headset via Virtual Desktop: trusts the headset's own
+          microphone (normally blocked, since it's usually a sign the real default mic got silently
+          swapped for a virtual one). Turn this on before putting the headset on, off when done -
+          requires restarting Echo to take effect either way.
+        </p>
+        <p id="settingsError" class="hint-text error"></p>
+      </div>
+
+      <div class="tab-panel" id="tab-plugins" hidden>
+        <h3 class="tab-subheading">Connected-account plugins</h3>
+        <div id="pluginsListConnected"></div>
+        <h3 class="tab-subheading">Standalone plugins</h3>
+        <div id="pluginsListStandalone"></div>
+        <p class="hint-text">Dashboard/native-listener only - never available over a phone call. New plugins dropped into <code>backend/plugins/</code> appear here automatically.</p>
+        <p id="pluginsError" class="hint-text error"></p>
+      </div>
+
+      <div class="tab-panel" id="tab-connections" hidden>
+        <div id="connectionsList"></div>
+        <p class="hint-text" id="connectionsStatusMsg"></p>
+      </div>
+
+      <div class="tab-panel" id="tab-audio" hidden>
+        <p class="hint-text" id="audioStatusMsg"></p>
+        <label class="field-row">
+          <span>Microphone</span>
+          <select id="micSelect"></select>
+        </label>
+        <div class="level-meter"><div id="levelBar" class="level-fill"></div></div>
+        <label class="field-row">
+          <span>Speaker output</span>
+          <select id="speakerSelect"></select>
+        </label>
+        <p class="hint-text">
+          This panel previews devices through your browser tab only - it can't change what
+          the always-on background listener (the thing that actually hears "Echo") uses,
+          since that runs outside the browser and always follows Windows' default recording
+          device. To change which mic Echo listens through, set it as default in Windows
+          Sound settings.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <div class="col-divider"></div>
+
+  <div class="canvas-column">
+    <aside class="canvas-area" id="canvasPanel" hidden>
+      <h2 class="side-heading">Canvas <span id="canvasTitle" class="side-count"></span></h2>
+      <div class="canvas-frame-wrap">
+        <iframe id="canvasFrame" sandbox="allow-scripts" title="Echo canvas preview"></iframe>
+      </div>
+      <p class="hint-text">
+        Live preview of a page Echo builds when asked to make a website, app, or visual demo -
+        sandboxed, no access to this dashboard or your real browser.
+      </p>
+    </aside>
+
+    <aside class="canvas-area model3d-area" id="model3dPanel" hidden>
+      <h2 class="side-heading">3D Canvas <span id="model3dTitle" class="side-count"></span></h2>
+      <div class="model3d-frame-wrap">
+        <canvas id="model3dCanvas"></canvas>
+      </div>
+      <p class="hint-text">
+        Live preview of a 3D model Echo generates when asked - drag to orbit, scroll to zoom.
+      </p>
+    </aside>
+  </div>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="model3d-viewer.js"></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
