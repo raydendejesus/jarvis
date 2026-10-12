@@ -95,10 +95,10 @@ async def submit_workflow(workflow: dict) -> str:
         return resp.json()["prompt_id"]
 
 
-async def wait_for_history(prompt_id: str) -> dict | None:
+async def wait_for_history(prompt_id: str, timeout_seconds: float = GENERATION_TIMEOUT_SECONDS) -> dict | None:
     """Polls /history until the given prompt_id's outputs are ready, returning
     its full `outputs` dict (node_id -> node's UI-result dict), or None on timeout."""
-    deadline = time.monotonic() + GENERATION_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout_seconds
     async with httpx.AsyncClient(timeout=15) as client:
         while time.monotonic() < deadline:
             hist_resp = await client.get(f"{COMFYUI_URL}/history/{prompt_id}")

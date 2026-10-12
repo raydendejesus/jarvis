@@ -41,6 +41,10 @@ WORKFLOW_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "plugins_data"
 # repeated generations of the same image don't come back identical.
 SEED_NODE_IDS = ("3", "12", "18", "23")
 
+# Sampling plus UV unwrap/texture bake takes 3-6 minutes on a 3090 - far past
+# the 180s default that suits plain image generation.
+GENERATION_TIMEOUT_SECONDS_3D = 900
+
 
 def _load_workflow_template() -> dict:
     return json.loads(WORKFLOW_TEMPLATE_PATH.read_text(encoding="utf-8"))
@@ -66,7 +70,7 @@ def _build_workflow(image_filename: str) -> dict:
 
 async def _run_generation(workflow: dict) -> bytes | None:
     prompt_id = await comfyui_shared.submit_workflow(workflow)
-    outputs = await comfyui_shared.wait_for_history(prompt_id)
+    outputs = await comfyui_shared.wait_for_history(prompt_id, timeout_seconds=GENERATION_TIMEOUT_SECONDS_3D)
     if outputs is None:
         return None
     for node_output in outputs.values():
