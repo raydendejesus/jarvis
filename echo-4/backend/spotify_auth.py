@@ -98,6 +98,32 @@ def _basic_auth_header(client: dict) -> dict:
     return {"Authorization": "Basic " + base64.b64encode(raw).decode("ascii")}
 
 
+UNREACHABLE = "__unreachable__"
+
+
+async def check_credentials(client_id: str, client_secret: str) -> str | None:
+    """Asks Spotify whether this Client ID / Client secret pair is real, using the one call
+    that needs no sign-in. Returns None when it's valid, UNREACHABLE when Spotify couldn't
+    be asked, or a plain sentence about what's wrong."""
+    raw = f"{client_id}:{client_secret}".encode("utf-8")
+    try:
+        async with httpx.AsyncClient(timeout=15) as http_client:
+            resp = await http_client.post(
+                TOKEN_ENDPOINT,
+                data={"grant_type": "client_credentials"},
+                headers={"Authorization": "Basic " + base64.b64encode(raw).decode("ascii")},
+            )
+    except httpx.HTTPError:
+        return UNREACHABLE
+    if resp.status_code == 200:
+        return None
+    return (
+        "Spotify doesn't recognise that Client ID and Client secret. They are two separate values on your app's "
+        "Settings page in the Spotify developer dashboard: the Client ID is shown at the top, and the Client secret "
+        "appears when you press \"View client secret\". An API key or any other token won't work here."
+    )
+
+
 async def exchange_code(code: str) -> None:
     client = load_client_config()
     if client is None:

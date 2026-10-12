@@ -1153,6 +1153,11 @@ async def github_save_credentials(update: OAuthClientCredentials) -> dict:
 async def spotify_save_credentials(update: OAuthClientCredentials) -> dict:
     if not update.client_id.strip() or not update.client_secret.strip():
         raise HTTPException(status_code=400, detail="Both the Client ID and Client secret are required.")
+    problem = await spotify_auth.check_credentials(update.client_id.strip(), update.client_secret.strip())
+    if problem == spotify_auth.UNREACHABLE:
+        raise HTTPException(status_code=502, detail="Couldn't reach Spotify to check those - check your internet connection and try again.")
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
     spotify_auth.save_client_config(update.client_id.strip(), update.client_secret.strip())
     return {"ok": True}
 

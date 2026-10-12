@@ -820,3 +820,35 @@ body.speaking .core::before {
 body {
   align-items: safe center;
 }
+
+/* guided setup box inside a connection card (Spotify) */
+.setup-steps {
+  border: 1px solid var(--accent-dim);
+  background: rgba(18, 22, 19, 0.55);
+  padding: 10px 14px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.setup-steps ol {
+  margin: 8px 0 8px 18px;
+  padding: 0;
+}
+
+.setup-steps li {
+  margin: 6px 0;
+}
+
+.setup-steps code {
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.setup-steps a {
+  color: var(--accent);
+}
+
+.setup-steps .hud-btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}

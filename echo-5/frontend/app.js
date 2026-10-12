@@ -898,6 +898,32 @@ async function loadConnections() {
         intro.textContent = `Paste the Client ID and Client secret from your ${conn.label.split(" (")[0]} OAuth client below, then click Save. No file editing needed.`;
         row.appendChild(intro);
 
+        if (conn.name === "spotify") {
+          const help = document.createElement("div");
+          help.className = "setup-steps";
+          const redirect = `${window.location.origin}/api/connections/spotify/callback`;
+          help.innerHTML =
+            "<strong>Setting up Spotify (one time, about 3 minutes)</strong>" +
+            "<ol>" +
+            '<li>Open the <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify developer dashboard</a> and press <em>Create app</em>.</li>' +
+            "<li>Any name. Under <em>Redirect URIs</em> add exactly this address, tick <em>Web API</em>, and save: " +
+            '<code id="spotifyRedirect"></code> <button type="button" class="hud-btn" id="spotifyRedirectCopy">Copy</button></li>' +
+            "<li>Open the app's <em>Settings</em>. Copy the <strong>Client ID</strong>, then press <em>View client secret</em> and copy the <strong>Client secret</strong>.</li>" +
+            "<li>Paste both below, press <em>Save</em>, then press <em>Connect Spotify</em> and approve.</li>" +
+            "</ol>" +
+            '<p class="hint-text">These are two values, not an "API key". Spotify Premium is needed for Echo to start playback.</p>';
+          row.appendChild(help);
+          help.querySelector("#spotifyRedirect").textContent = redirect;
+          help.querySelector("#spotifyRedirectCopy").addEventListener("click", async (event) => {
+            try {
+              await navigator.clipboard.writeText(redirect);
+              event.target.textContent = "Copied";
+            } catch (err) {
+              event.target.textContent = "Select and copy it manually";
+            }
+          });
+        }
+
         const idLabel = document.createElement("label");
         idLabel.className = "field-row";
         const idSpan = document.createElement("span");
@@ -936,7 +962,8 @@ async function loadConnections() {
           if (resp.ok) {
             loadConnections();
           } else {
-            saveMsg.textContent = "Save failed - check the backend is running and try again.";
+            const data = await resp.json().catch(() => ({}));
+            saveMsg.textContent = data.detail || "Save failed - check the backend is running and try again.";
             saveMsg.classList.add("error");
           }
         });
