@@ -4,6 +4,7 @@
 > same brain model (`hermes3`), same Whisper size, same toggles, same behavior. It simply loads less,
 > re-reads less and wastes less - the right pick for a smaller or older machine. Everything below the
 > line is the unchanged echo-4 documentation.
+> See [how Echo-5 compares to every earlier version](#how-echo-5-compares-to-every-earlier-version).
 
 ## What was compressed or smushed
 
@@ -39,6 +40,124 @@ All numbers were measured on this project's own machine, fresh process each time
 - Side-by-side equivalence tests against echo-4: 300 random face-matching cases agree to within 3e-8; wake-word results are identical across a 20-phrase corpus; the level meter matches exactly; the config cache is checked against edits, corrupt files and recovery.
 - Both servers run side by side against identical requests: every endpoint answers 200 with the same behavior.
 - The dashboard loads in a real browser with no errors, including the lazily loaded 3D viewer rendering a model.
+
+## How Echo-5 compares to every earlier version
+
+Counted from the source in this repository and measured on this project's own machine (a fresh process
+each time, median of three), so every column is directly comparable. Sizes count source files only; docs are
+excluded so they don't move when this file does.
+
+### Size and capacity
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Source files | 18 | 21 | 47 | 59 | **60** |
+| Source size | 77 KB | 109 KB | 291 KB | 390 KB | **394 KB** |
+| Python lines | 1,393 | 2,145 | 5,040 | 7,277 | **7,358** |
+| Dashboard (HTML/JS/CSS) | 27 KB | 29 KB | 59 KB | 70 KB | **70 KB** |
+| Tools the brain can use | 6 | 10 | 32 | 43 | **43** |
+| Plugins | 0 | 0 | 7 | 12 | **12** |
+| Toggles (core + plugin) | 5 | 7 | 17 | 24 | **24** |
+| Server endpoints | 13 | 16 | 37 | 44 | **44** |
+| Brain model | Qwen2.5 14B (~9 GB VRAM) | Hermes 3 8B (~5.7 GB) | Hermes 3 8B | Hermes 3 8B | **Hermes 3 8B, unloads when idle** |
+
+### What it costs to run (the server process)
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Memory at load | 75.0 MB | 75.0 MB | 75.8 MB | 76.3 MB | **56.7 MB** |
+| Memory running (after the same requests) | 76.3 MB | 76.4 MB | 77.1 MB | 82.7 MB | **63.2 MB** |
+| Time to load | 938 ms | 1,148 ms | 1,328 ms | 1,173 ms | **953 ms** |
+
+The server process is small in every version. The real weight is the brain (`hermes3` 8B, about 5.7 GB of VRAM, 6.7 GB
+with "two replies at once" on) and Whisper `medium.en` (about 1.5 GB). The brain's footprint dropped by more than a third
+from 00-1 to 00-2 (14B to 8B); Echo-5 is the version that lets it unload when idle.
+
+### Abilities
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Voice listener, web search, memory, vision, Desk Guard, place calls | yes | yes | yes | yes | yes |
+| Knowledge base, location, hang up on command, missed-call alerts | - | yes | yes | yes | yes |
+| Browser control, canvas, plugins (Google, GitHub, Notion, Discord, expenses, images, 3D) | - | - | yes | yes | yes |
+| Open apps, Steam games, Spotify, media keys, shortcuts like Netflix | - | - | - | yes | yes |
+| Phone security (per-contact access, unknown numbers refused), Sir Page | - | - | - | yes | yes |
+| Fast phone (hello pre-rendered, stops on hang-up, bounded replies), "two at once" switch | - | - | - | yes | yes |
+| "Echo" wake word ("Jarvis" still works), compact toggle panel | - | - | - | yes | yes |
+| Heavy libraries load on first use, models unload when idle | - | - | - | - | yes |
+
+<details>
+<summary>The full ability-by-ability list</summary>
+
+**The basics**
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Local brain, no cloud AI | yes | yes | yes | yes | yes |
+| Always-on voice listener (wake word) | yes | yes | yes | yes | yes |
+| Web search and reading pages | yes | yes | yes | yes | yes |
+| Remembers facts about you | yes | yes | yes | yes | yes |
+| Knowledge base (what it researches) | - | yes | yes | yes | yes |
+| Phone book | yes | yes | yes | yes | yes |
+
+**Senses**
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Look at photos, video, screen, camera | yes | yes | yes | yes | yes |
+| Location awareness | - | yes | yes | yes | yes |
+| Desk Guard (face check and lock) | yes | yes | yes | yes | yes |
+
+**Phone**
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Place calls for you | yes | yes | yes | yes | yes |
+| Hang up a call on command | - | yes | yes | yes | yes |
+| Missed-call alerts | - | yes | yes | yes | yes |
+| Per-contact "can call Echo", unknown numbers refused | - | - | - | yes | yes |
+| Greeting built from the call's subject, callers greeted by name | - | - | - | yes | yes |
+| Opening line rendered and brain warmed before dialing | - | - | - | yes | yes |
+| Stops generating when a caller hangs up | - | - | - | yes | yes |
+| Replies bounded so nobody waits behind a runaway | - | - | - | yes | yes |
+| Guests get limited tools; tool names enforced on calls | - | - | - | yes | yes |
+| Sir Page (phones you when something happens) | - | - | - | yes | yes |
+
+**Computer**
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Control your browser (extension) | - | - | yes | yes | yes |
+| Build live pages on a canvas | - | - | yes | yes | yes |
+| Plugin system | - | - | yes | yes | yes |
+| Gmail, Calendar, Drive, Slides | - | - | yes | yes | yes |
+| GitHub, Notion, Discord | - | - | yes | yes | yes |
+| Expense tracker | - | - | yes | yes | yes |
+| Image generation | - | - | yes | yes | yes |
+| 3D model generation and 3D canvas | - | - | yes | yes | yes |
+| Open apps by voice | - | - | - | yes | yes |
+| Launch Steam games | - | - | - | yes | yes |
+| Spotify: playlists, songs, liked songs, skip to a time, shuffle | - | - | - | yes | yes |
+| Media keys and custom shortcuts (Netflix and so on) | - | - | - | yes | yes |
+
+**Style and speed**
+
+| | 00-1 | 00-2 | 00-3 | echo-4 | **echo-5** |
+|---|---|---|---|---|---|
+| Answers to "Echo" (and still "Jarvis") | - | - | - | yes | yes |
+| Custom voice engine hook | - | - | yes | yes | yes |
+| Compact filterable toggle panel | - | - | - | yes | yes |
+| "Two replies at once" Ollama switch | - | - | - | yes | yes |
+| Heavy libraries load only when needed | - | - | - | - | yes |
+| Brain and vision model unload when idle | - | - | - | - | yes |
+
+</details>
+
+### What this says
+
+- **Echo-5 does about 7x what 00-1 did** - 43 tools against 6, 24 toggles against 5, about 5x the code - **and loads lighter than 00-1**: 57 MB against 75 MB (24% less) and 63 MB running against 76 MB.
+- **Echo-5 vs echo-4:** a few KB more code (the caching and lazy-loading logic), about 19 MB less memory running (-24%) and a load about 19% faster, with identical abilities.
+- **Phone reply speed** was measured only for echo-4 and Echo-5 (1.8 s median down to about 0.7 s once the connection and pre-render fixes landed). The older versions' voice engine (Microsoft's edge-tts) currently refuses requests, so a fair test of them is not possible.
 
 ---
 
