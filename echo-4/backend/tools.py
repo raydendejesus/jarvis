@@ -583,6 +583,7 @@ async def _compose_call_greeting(contact_name: str, subject: str) -> str:
                     "model": KNOWLEDGE_TEXT_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
+                    "options": {"num_predict": 80},
                     "keep_alive": -1,
                 },
             )

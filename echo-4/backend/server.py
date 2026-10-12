@@ -5,7 +5,7 @@ import re
 import tempfile
 import time
 from collections import OrderedDict
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import httpx
@@ -305,7 +305,7 @@ async def run_chat_turn(user_message: str, cfg: dict) -> str:
     for _ in range(MAX_TOOL_ITERATIONS):
         resp = await http_pool.client().post(
             OLLAMA_URL,
-            json={"model": MODEL_NAME, "messages": messages, "tools": schemas, "stream": False, "keep_alive": -1},
+            json={"model": MODEL_NAME, "messages": messages, "tools": schemas, "stream": False, "options": {"num_predict": CHAT_MAX_REPLY_TOKENS}, "keep_alive": -1},
             timeout=120,
         )
         resp.raise_for_status()
@@ -402,6 +402,23 @@ async def get_listener_event() -> dict:
 
 PHONE_MAX_HISTORY = 20
 
+# Ollama runs one request at a time on this model, so any single reply that never stops
+# holds everyone else (the next caller, your own voice command) in line behind it - and in
+# practice a runaway reply only ended when the 2-minute client timeout killed it. Every
+# reply is therefore bounded. A phone reply is a couple of sentences, so its cap is small;
+# the dashboard cap is large enough for a whole page of code but still finite.
+PHONE_MAX_REPLY_TOKENS = 220
+CHAT_MAX_REPLY_TOKENS = 8000
+PHONE_BRAIN_TIMEOUT_SECONDS = 30
+
+
+def _trim_to_last_sentence(text: str) -> str:
+    """A reply that hit its length cap is cut back to the last complete sentence."""
+    cut = max(text.rfind(". "), text.rfind("! "), text.rfind("? "), text.rfind(".\n"))
+    if text.rstrip().endswith((".", "!", "?")):
+        return text
+    return text[: cut + 1] if cut > 0 else text
+
 
 async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phone_tools: list[dict]) -> str:
     history = telephony.call_histories.setdefault(call_sid, [])
@@ -412,13 +429,15 @@ async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phon
     for _ in range(MAX_TOOL_ITERATIONS):
         resp = await http_pool.client().post(
             OLLAMA_URL,
-            json={"model": MODEL_NAME, "messages": messages, "tools": phone_tools, "stream": False, "keep_alive": -1},
-            timeout=120,
+            json={"model": MODEL_NAME, "messages": messages, "tools": phone_tools, "stream": False, "options": {"num_predict": PHONE_MAX_REPLY_TOKENS}, "keep_alive": -1},
+            timeout=PHONE_BRAIN_TIMEOUT_SECONDS,
         )
         resp.raise_for_status()
         data = resp.json()
 
         message = data["message"]
+        if data.get("done_reason") == "length" and not message.get("tool_calls"):
+            message["content"] = _trim_to_last_sentence(message.get("content", ""))
         messages.append(message)
         history.append(message)
 
@@ -602,12 +621,78 @@ async def telephony_outbound_voice(request: Request) -> Response:
     return Response(content=telephony.gather_texml(cfg, clip_id), media_type="application/xml")
 
 
+_HANGUP_XML = '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+HANGUP_WATCH_INTERVAL_SECONDS = 0.5
+STATUS_POLL_AFTER_SECONDS = 2.5
+
+
+async def _watch_for_hangup(request: Request, cfg: dict | None, call_sid: str) -> None:
+    """Returns once the caller is known to be gone. Signals, cheapest first: a status
+    webhook already said so; the phone network dropped our webhook connection (only a
+    hint - confirmed with Telnyx before acting, since a half-closed socket isn't a
+    hang-up); or, if a reply is taking a while, a throttled look at Telnyx's call record."""
+    started = time.monotonic()
+    while True:
+        await asyncio.sleep(HANGUP_WATCH_INTERVAL_SECONDS)
+        if telephony.call_has_ended(call_sid):
+            return
+        suspected = False
+        try:
+            suspected = await request.is_disconnected()
+        except Exception:  # noqa: BLE001 - only a hint
+            pass
+        waited = time.monotonic() - started
+        if cfg is not None and (suspected or waited >= STATUS_POLL_AFTER_SECONDS):
+            status = await telephony.fetch_call_status(cfg, call_sid, force=suspected)
+            if status in telephony.TERMINAL_CALL_STATUSES:
+                telephony.mark_call_ended(call_sid)
+                return
+
+
+async def _reply_clip_unless_hung_up(
+    request: Request, cfg: dict | None, call_sid: str, speech_text: str, system_prompt: str, phone_tools: list[dict]
+) -> str | None:
+    """Works out the reply and renders it to audio - and stops dead if the caller hangs up
+    first, returning None. Cancelling drops the request to the brain, which aborts the
+    generation, so a dead call never keeps anyone else waiting."""
+
+    async def produce() -> str:
+        try:
+            reply_text = await run_phone_turn(call_sid, speech_text, system_prompt, phone_tools)
+        except httpx.TimeoutException:
+            print(f"[telephony] the brain took over {PHONE_BRAIN_TIMEOUT_SECONDS}s on a phone turn - apologising instead", flush=True)
+            reply_text = "Sorry, I'm taking too long to think about that. Could you ask me again?"
+        return await _speak_clip(reply_text)
+
+    work = asyncio.create_task(produce())
+    telephony.inflight_work.setdefault(call_sid, set()).add(work)
+    watcher = asyncio.create_task(_watch_for_hangup(request, cfg, call_sid))
+    try:
+        await asyncio.wait({work, watcher}, return_when=asyncio.FIRST_COMPLETED)
+        if work.done() and not work.cancelled():
+            return work.result()
+        work.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await work
+        return None
+    except asyncio.CancelledError:
+        work.cancel()
+        raise
+    finally:
+        watcher.cancel()
+        telephony.inflight_work.get(call_sid, set()).discard(work)
+
+
 @app.post("/api/telephony/gather")
 async def telephony_gather(request: Request) -> Response:
     cfg = telephony.load_config()
     form = await request.form()
     call_sid = form.get("CallSid", "")
     speech_text = form.get("SpeechResult", "")
+
+    if telephony.call_has_ended(call_sid):
+        telephony.forget_call(call_sid)
+        return Response(content=_HANGUP_XML, media_type="application/xml")
 
     context = telephony.call_context.get(call_sid)
     if context is None:
@@ -650,8 +735,11 @@ async def telephony_gather(request: Request) -> Response:
         return Response(content=telephony.gather_texml(cfg, clip_id), media_type="application/xml")
 
     telephony.call_last_response_at[call_sid] = time.time()
-    reply_text = await run_phone_turn(call_sid, speech_text, system_prompt, phone_tools)
-    clip_id = await _speak_clip(reply_text)
+    clip_id = await _reply_clip_unless_hung_up(request, cfg, call_sid, speech_text, system_prompt, phone_tools)
+    if clip_id is None:
+        print(f"[telephony] caller hung up mid-reply - stopped generating ({call_sid[:8]})", flush=True)
+        telephony.forget_call(call_sid)
+        return Response(content=_HANGUP_XML, media_type="application/xml")
     return Response(content=telephony.gather_texml(cfg, clip_id), media_type="application/xml")
 
 
@@ -667,6 +755,12 @@ async def telephony_status(request: Request) -> Response:
     call_status = form.get("CallStatus", "")
     answered_by = form.get("AnsweredBy", "")
     contact = request.query_params.get("contact", "")
+
+    if call_status.lower() in telephony.TERMINAL_CALL_STATUSES:
+        # The other party is gone: stop anything still being generated for them.
+        telephony.mark_call_ended(call_sid)
+        if not telephony.inflight_work.get(call_sid):
+            telephony.forget_call(call_sid)
 
     if call_status in ("completed", *UNANSWERED_STATUSES):
         stale_keys = [k for k, v in telephony.active_outbound_calls.items() if v == call_sid]

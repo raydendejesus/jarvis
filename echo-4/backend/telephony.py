@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 import xml.sax.saxutils as xml_sax
 from collections import OrderedDict
@@ -24,6 +25,74 @@ active_outbound_calls: dict[str, str] = {}  # lowercased contact key -> CallSid
 # Generated TTS clips Telnyx's <Play> fetches by URL. Not popped on read since
 # Telnyx may retry the GET; capped in size instead so it can't grow unbounded.
 audio_clips: "OrderedDict[str, bytes]" = OrderedDict()
+
+
+# --- hang-ups ------------------------------------------------------------------------
+# A caller who hangs up mid-reply must not keep the brain, the voice engine - and the
+# next caller's turn - busy generating something nobody will ever hear.
+TERMINAL_CALL_STATUSES = {"completed", "busy", "no-answer", "failed", "canceled", "cancelled"}
+MAX_ENDED_CALLS_REMEMBERED = 200
+ended_calls: "OrderedDict[str, float]" = OrderedDict()
+inflight_work: dict[str, set] = {}  # CallSid -> asyncio tasks currently generating for that call
+
+
+def mark_call_ended(call_sid: str) -> None:
+    """The caller is gone: remember it, and stop anything still being generated for them."""
+    if not call_sid:
+        return
+    ended_calls[call_sid] = time.time()
+    while len(ended_calls) > MAX_ENDED_CALLS_REMEMBERED:
+        ended_calls.popitem(last=False)
+    for task in list(inflight_work.get(call_sid, ())):
+        task.cancel()
+
+
+def call_has_ended(call_sid: str) -> bool:
+    return call_sid in ended_calls
+
+
+def forget_call(call_sid: str) -> None:
+    for store in (call_context, call_last_response_at, call_histories):
+        store.pop(call_sid, None)
+    inflight_work.pop(call_sid, None)
+    for key in [k for k, v in active_outbound_calls.items() if v == call_sid]:
+        del active_outbound_calls[key]
+
+
+# Telnyx rate-limits its call-status endpoint hard, and the same API key places calls and
+# rings sir - so confirming a hang-up this way is deliberately slow, shared across every
+# call, and backs off completely the moment Telnyx pushes back.
+CALL_STATUS_MIN_INTERVAL_SECONDS = 3.0
+CALL_STATUS_BACKOFF_SECONDS = 20.0
+_last_status_fetch = 0.0
+_status_backoff_until = 0.0
+
+
+async def fetch_call_status(cfg: dict, call_sid: str, force: bool = False) -> str | None:
+    """Telnyx's own view of a call ("in-progress", "completed", ...), or None when unknown
+    or when asking would be too soon."""
+    global _last_status_fetch, _status_backoff_until
+    now = time.monotonic()
+    if now < _status_backoff_until:
+        return None
+    if not force and now - _last_status_fetch < CALL_STATUS_MIN_INTERVAL_SECONDS:
+        return None
+    _last_status_fetch = now
+    url = f"{TELNYX_API_BASE}/texml/Accounts/{cfg['account_sid']}/Calls/{call_sid}"
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(url, headers={"Authorization": f"Bearer {cfg['api_key']}"})
+    except httpx.HTTPError:
+        return None
+    if resp.status_code == 429:
+        _status_backoff_until = now + CALL_STATUS_BACKOFF_SECONDS
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        return str(resp.json().get("status", "")).strip().lower() or None
+    except ValueError:
+        return None
 
 
 def load_config() -> dict | None:
