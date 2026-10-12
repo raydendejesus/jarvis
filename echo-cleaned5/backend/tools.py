@@ -11,6 +11,7 @@ import canvas_state
 import knowledge
 import location
 import memory
+import model_policy
 import phonebook
 import plugin_loader
 import telephony
@@ -345,7 +346,7 @@ async def remember(fact: str) -> str:
     return memory.add_fact(fact[:MAX_FACT_CHARS])
 
 
-KNOWLEDGE_OLLAMA_URL = "http://localhost:11434/api/chat"
+KNOWLEDGE_OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 KNOWLEDGE_TEXT_MODEL = "echo"
 
 
@@ -363,7 +364,7 @@ async def _condense_file(path) -> None:
                 "model": KNOWLEDGE_TEXT_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
-                "keep_alive": -1,
+                "keep_alive": model_policy.BRAIN_KEEP_ALIVE,
             },
         )
         resp.raise_for_status()
@@ -587,7 +588,7 @@ async def _compose_call_greeting(contact_name: str, subject: str) -> str:
                     "model": KNOWLEDGE_TEXT_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
-                    "keep_alive": -1,
+                    "keep_alive": model_policy.BRAIN_KEEP_ALIVE,
                 },
             )
             resp.raise_for_status()
@@ -612,6 +613,33 @@ async def _compose_call_greeting(contact_name: str, subject: str) -> str:
     return f"{intro} {sentence}"
 
 
+# Registered by the server at startup: warm the brain, and render speech to an audio clip.
+_call_prep: dict = {"warm": None, "render": None}
+
+
+def register_call_prep(warm, render) -> None:
+    _call_prep["warm"], _call_prep["render"] = warm, render
+
+
+CALL_PREP_TIMEOUT_SECONDS = 60
+
+
+async def _prepare_call_audio(opening: str) -> str:
+    """Does everything slow BEFORE the phone rings: loads the brain if it isn't loaded and
+    renders the opening line to audio, so the moment the call is answered the person hears
+    the hello instantly and the first reply isn't a cold start. Returns the clip id, or ''
+    if anything fails (the call then simply renders the hello on answer, as before)."""
+    warm, render = _call_prep["warm"], _call_prep["render"]
+    if render is None:
+        return ""
+    jobs = [render(opening)] + ([warm()] if warm else [])
+    try:
+        results = await asyncio.wait_for(asyncio.gather(*jobs, return_exceptions=True), CALL_PREP_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        return ""
+    return results[0] if isinstance(results[0], str) else ""
+
+
 async def call_phone_number(name_or_number: str, message: str = "") -> str:
     cfg = telephony.load_config()
     if cfg is None:
@@ -622,11 +650,14 @@ async def call_phone_number(name_or_number: str, message: str = "") -> str:
         return f"I couldn't find '{name_or_number}' in the phone book, and it doesn't look like a valid phone number either."
 
     contact_name = name_or_number if number != name_or_number else ""
+    to_owner = number == cfg.get("owner_number")
     greeting = ""
-    if message.strip() and number != cfg.get("owner_number"):
+    if message.strip() and not to_owner:
         greeting = await _compose_call_greeting(contact_name, message.strip())
+    opening = telephony.outbound_opening(contact_name, message, greeting, to_owner)
+    clip_id = await _prepare_call_audio(opening)
     try:
-        await telephony.place_outbound_call(cfg, number, contact_name, message, greeting)
+        await telephony.place_outbound_call(cfg, number, contact_name, message, opening, clip_id)
     except httpx.TimeoutException:
         # The request may well have reached Telnyx and placed the call anyway -
         # a client-side timeout isn't proof the call itself failed, so don't

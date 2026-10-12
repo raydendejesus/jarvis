@@ -6,7 +6,7 @@ from pathlib import Path
 
 import httpx
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 VISION_MODEL = "qwen2.5vl:7b"
 TEXT_MODEL = "echo"
 FRAME_COUNT = 6

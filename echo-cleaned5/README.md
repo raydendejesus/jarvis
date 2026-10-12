@@ -22,12 +22,15 @@ All numbers were measured on this project's own machine, fresh process each time
 | Launcher ran `pip install` on every start and called `ollama list` three times | every start | pip only when `requirements.txt` changed; one `ollama list` | about 1.2 s faster start |
 | `uvicorn[standard]` pulled in websockets, file-watching and dotenv support nothing here uses | extras installed | plain `uvicorn` | ~5 fewer packages to install |
 | Per-call phone state (histories, contexts) was never forgotten | grows forever | newest 50 calls kept | bounded memory on a long-running machine |
+| **Every model and voice request opened a new connection** (through `localhost`, which Windows tries over IPv6 first) and built a fresh HTTP client each time | new every call | one shared client to `127.0.0.1` | Phone reply turns **1.8 s median (6.2 s worst) -> 0.7 s (0.9 s worst)**. Also applied to echo-4 |
+| **The phone hello was rendered only after the call was answered** | ~0.6 s of silence | the brain is loaded and the hello rendered before dialing; fixed phrases cached | Hello plays instantly (0.6 s -> ~0.01 s). Also applied to echo-4 |
+| **The brain and vision model stayed in memory forever** | loaded forever | unload after 20 min / 5 min idle (`backend/model_policy.py`) | About 5.7 GB of VRAM is freed when idle. The first reply after a long quiet spell takes ~3 s (up to ~15 s if the model isn't in the disk cache); every reply after it is as fast as before. Phone calls never feel it |
 | One lint finding (a string with no placeholders) | 1 | 0 | - |
 
 ### Deliberately left alone
 
 - **The brain model and Whisper size** - unchanged, as asked. They are the real footprint (`hermes3` 8B, about 5-6 GB of VRAM; Whisper `medium.en`, about 1.5 GB).
-- **`keep_alive: -1`** keeps the brain loaded in memory permanently, which is why replies are instant. Letting it unload after idle would free that memory at the cost of a slow first reply; that is a behavior change, so it is not done here.
+- **Whisper (`medium.en`, ~1.5 GB VRAM)** stays loaded - it is the always-on listener, and unloading it would make the wake word lag.
 - Generated 3D models accumulate on disk (roughly 15-60 MB each); delete old ones in `backend/plugins_data/generated_3d_models/` if space is tight.
 
 ### How it was verified
@@ -62,9 +65,11 @@ Echo checks that what it's about to use is actually running and starts it first 
 
 **Connecting Spotify** (one time): create a free app at developer.spotify.com/dashboard, add the redirect URI `http://127.0.0.1:8765/api/connections/spotify/callback`, then paste its Client ID and Client secret into Echo's Connections tab and press Connect.
 
-**Calls.** "Echo, call Austin about dinner tonight" opens with a greeting built from the subject ("Hi Austin, this is Echo ... I'm calling about dinner tonight"). Inbound callers are greeted by name. Each phone book contact has a **can call Echo** switch: contacts switched on are let in as guests (web lookups only, no access to your memory or computer, 10-minute cap); everyone else - including any number not saved - is turned away and listed under "Turned-away calls". Only your own number is treated as you.
+**Calls.** "Echo, call Austin about dinner tonight" opens with a greeting built from the subject ("Hi Austin, this is Echo ... I'm calling about dinner tonight"). Inbound callers are greeted by name. Each phone book contact has a **can call Echo** switch: contacts switched on are let in as guests (web lookups only, no access to your memory or computer; no limit on how often or how long they call); everyone else - including any number not saved - is turned away and listed under "Turned-away calls". Only your own number is treated as you.
 
-**Sir Page.** A toggle that phones you and says what happened: an unknown number was turned away, an allowed contact is on a call, or Desk Guard saw someone it didn't recognize and locked the computer. Limited to one call per event per 10 minutes and 6 an hour.
+**Fast phone replies.** Everything slow now happens before the phone rings: the brain is loaded and the opening line is rendered to audio before Echo dials, so the callee hears the hello the instant they answer and there is no cold start on the first reply. Fixed phrases ("didn't catch that", inbound hellos for each allowed contact) are rendered ahead of time and cached. The brain and voice engine now share one connection (`127.0.0.1`, not `localhost`) instead of opening a new one per request. Measured on the same machine: hello 0.6 s -> instant; reply turns 1.8 s median (6.2 s worst) -> 0.7 s (0.9 s worst).
+
+**Sir Page.** A toggle that phones you and says what happened: an unknown number was turned away, an allowed contact is on a call, or Desk Guard saw someone it didn't recognize and locked the computer. It only limits how often Echo rings you - never anyone calling Echo: the same event isn't repeated within 10 minutes, unknown-number alerts are held to 6 an hour (extras are mentioned on your next call), and Desk Guard alerts are never held back.
 
 **Dashboard.** All switches moved into a compact, filterable Toggles panel under the phone book.
 

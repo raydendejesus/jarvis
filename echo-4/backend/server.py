@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,6 +19,7 @@ import canvas_state
 import config as config_module
 import discord_auth
 import github_auth
+import http_pool
 import pager
 import spotify_auth
 import google_auth
@@ -34,7 +36,7 @@ import vision
 
 MODEL_NAME = "echo"
 VOICE = "en-GB-RyanNeural"
-OLLAMA_URL = "http://localhost:11434/api/chat"
+OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 MAX_HISTORY_MESSAGES = 30
 MAX_TOOL_ITERATIONS = 8
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
@@ -56,8 +58,11 @@ listener_status = {"seq": 0, "phase": "idle", "text": ""}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     guard_task = asyncio.create_task(security.guard_loop())
+    tools.register_call_prep(warm_model, _speak_clip)
+    asyncio.create_task(prerender_phone_phrases())
     yield
     guard_task.cancel()
+    await http_pool.aclose()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -155,15 +160,24 @@ class SettingsUpdate(BaseModel):
 VOICELAB_URL = "http://127.0.0.1:8791/jarvis"
 
 
-async def synthesize(text: str) -> bytes:
+async def _voicelab_audio(text: str) -> bytes | None:
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(VOICELAB_URL, json={"text": text})
-            resp.raise_for_status()
-            if resp.content:
-                return resp.content
+        resp = await http_pool.client().post(VOICELAB_URL, json={"text": text}, timeout=30)
+        resp.raise_for_status()
+        return resp.content or None
     except Exception as exc:  # noqa: BLE001 - fall back so Echo is never silent
         print(f"[voice] custom voice unavailable ({exc}), using fallback", flush=True)
+        return None
+
+
+async def synthesize(text: str) -> bytes:
+    audio = await _voicelab_audio(text)
+    if audio:
+        return audio
+    return await _edge_audio(text)
+
+
+async def _edge_audio(text: str) -> bytes:
     import edge_tts
     communicate = edge_tts.Communicate(text, voice=VOICE)
     audio_chunks = bytearray()
@@ -250,8 +264,7 @@ async def ensure_ollama_running() -> bool:
 
     async def _up() -> bool:
         try:
-            async with httpx.AsyncClient(timeout=2) as client:
-                await client.get("http://localhost:11434/api/tags")
+            await http_pool.client().get("http://127.0.0.1:11434/api/tags", timeout=2)
             return True
         except httpx.HTTPError:
             return False
@@ -290,13 +303,13 @@ async def run_chat_turn(user_message: str, cfg: dict) -> str:
     schemas = tools.available_schemas(cfg)
 
     for _ in range(MAX_TOOL_ITERATIONS):
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                OLLAMA_URL,
-                json={"model": MODEL_NAME, "messages": messages, "tools": schemas, "stream": False, "keep_alive": -1},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await http_pool.client().post(
+            OLLAMA_URL,
+            json={"model": MODEL_NAME, "messages": messages, "tools": schemas, "stream": False, "keep_alive": -1},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         message = data["message"]
         messages.append(message)
@@ -397,13 +410,13 @@ async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phon
     allowed_tool_names = {t["function"]["name"] for t in phone_tools}
 
     for _ in range(MAX_TOOL_ITERATIONS):
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                OLLAMA_URL,
-                json={"model": MODEL_NAME, "messages": messages, "tools": phone_tools, "stream": False, "keep_alive": -1},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await http_pool.client().post(
+            OLLAMA_URL,
+            json={"model": MODEL_NAME, "messages": messages, "tools": phone_tools, "stream": False, "keep_alive": -1},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         message = data["message"]
         messages.append(message)
@@ -433,9 +446,75 @@ async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phon
     return "I'm having some trouble completing that thought. Let's pick this up another time, goodbye."
 
 
+_phrase_audio: "OrderedDict[str, bytes]" = OrderedDict()
+MAX_CACHED_PHRASES = 64
+
+
+async def _speech_audio(text: str) -> bytes:
+    """Voice synthesis with a small cache: the fixed phrases on a call (hellos, "didn't catch
+    that") are rendered once, ahead of time, so they play instantly. Only audio from the
+    custom voice is cached - a fallback-voice render is never kept."""
+    cached = _phrase_audio.get(text)
+    if cached is not None:
+        _phrase_audio.move_to_end(text)
+        return cached
+    audio = await _voicelab_audio(text)
+    if audio:
+        if len(text) <= 160:
+            _phrase_audio[text] = audio
+            while len(_phrase_audio) > MAX_CACHED_PHRASES:
+                _phrase_audio.popitem(last=False)
+        return audio
+    return await _edge_audio(text)
+
+
 async def _speak_clip(text: str) -> str:
-    audio_bytes = await synthesize(text)
-    return telephony.register_audio_clip(audio_bytes)
+    return telephony.register_audio_clip(await _speech_audio(text))
+
+
+async def warm_model() -> None:
+    """Load the brain into memory ahead of when it's needed - a call about to be placed, or
+    one just answered - so the first reply isn't a cold start."""
+    try:
+        await http_pool.client().post(
+            OLLAMA_URL, json={"model": MODEL_NAME, "messages": [], "keep_alive": -1}, timeout=120
+        )
+    except Exception as exc:  # noqa: BLE001 - purely an optimization
+        print(f"[ollama] warm-up failed: {exc}", flush=True)
+
+
+def _inbound_opening(role: str, caller_name: str | None) -> str:
+    if role == "guest":
+        return f"Hi {caller_name}, this is Echo, {telephony.OWNER_NICKNAME_TO_OTHERS}'s AI assistant. How can I help you?"
+    if caller_name and caller_name.strip().lower() != "sir":
+        return f"Hi {caller_name}, this is Echo. How can I help you?"
+    return "Hello, sir. How can I help you?"
+
+
+FIXED_CALL_PHRASES = (
+    "Sorry, I didn't catch that. Could you say it again?",
+    "I haven't heard anything in a while, so I'll let you go. Goodbye.",
+    "Sorry, I lost track of this call. Please call back. Goodbye.",
+    "I'm sorry, I have to end this call now. Goodbye.",
+    "I'm sorry, I can't continue this call. Goodbye.",
+)
+
+
+async def prerender_phone_phrases() -> None:
+    """Render every phrase a call can start with ahead of time (at startup, and again when
+    the phone book changes), so answering a call never waits on voice synthesis."""
+    phrases = list(FIXED_CALL_PHRASES)
+    cfg = telephony.load_config()
+    if cfg and cfg.get("owner_number"):
+        phrases.append(_inbound_opening("owner", phonebook.name_for_number(cfg["owner_number"])))
+    for entry in phonebook.load_entries():
+        if entry.get("can_call_echo"):
+            phrases.append(_inbound_opening("guest", entry["name"]))
+    for phrase in phrases:
+        try:
+            await _speech_audio(phrase)
+        except Exception:  # noqa: BLE001 - best effort
+            pass
 
 
 @app.post("/api/telephony/voice")
@@ -484,14 +563,8 @@ async def telephony_voice(request: Request) -> Response:
         asyncio.create_task(
             pager.page_owner(f"guest:{caller_name}", f"Sir, {caller_name} is on a call with me right now.")
         )
-        opening = (
-            f"Hi {caller_name}, this is Echo, {telephony.OWNER_NICKNAME_TO_OTHERS}'s AI assistant. "
-            "How can I help you?"
-        )
-    elif caller_name and caller_name.strip().lower() != "sir":
-        opening = f"Hi {caller_name}, this is Echo. How can I help you?"
-    else:
-        opening = "Hello, sir. How can I help you?"
+    asyncio.create_task(warm_model())
+    opening = _inbound_opening(policy["role"], caller_name)
     clip_id = await _speak_clip(opening)
     return Response(content=telephony.gather_texml(cfg, clip_id), media_type="application/xml")
 
@@ -515,23 +588,17 @@ async def telephony_outbound_voice(request: Request) -> Response:
     dialed_number = form.get("To", "")
     calling_owner = cfg and dialed_number and dialed_number == cfg.get("owner_number")
 
-    if calling_owner:
-        opening = f"Hello, sir. {opening_message}" if opening_message else "Hello, sir - it's Echo."
-    elif greeting:
-        opening = greeting
-    else:
-        hello = f"Hi {contact_name}, this is Echo" if contact_name else "Hello, this is Echo"
-        opening = (
-            f"{hello}, calling on behalf of {telephony.OWNER_NICKNAME_TO_OTHERS}. {opening_message}"
-            if opening_message
-            else f"{hello}, an AI assistant calling on behalf of {telephony.OWNER_NICKNAME_TO_OTHERS}."
-        )
+    opening = telephony.outbound_opening(contact_name, opening_message, greeting, bool(calling_owner))
     # Recorded as something Echo already said, so the model doesn't re-introduce
     # itself again on the first real reply - it otherwise has no way of knowing
     # this opening line already happened.
     telephony.call_histories.setdefault(call_sid, []).append({"role": "assistant", "content": opening})
 
-    clip_id = await _speak_clip(opening)
+    # The hello was rendered before the call was placed; only fall back to rendering it
+    # now if that clip is missing.
+    prepared = request.query_params.get("clip", "")
+    clip_id = prepared if prepared and telephony.get_audio_clip(prepared) else await _speak_clip(opening)
+    asyncio.create_task(warm_model())
     return Response(content=telephony.gather_texml(cfg, clip_id), media_type="application/xml")
 
 
@@ -655,7 +722,9 @@ async def get_phonebook() -> list[dict]:
 
 @app.post("/api/phonebook")
 async def add_phonebook_entry(entry: PhonebookEntry) -> list[dict]:
-    return phonebook.add_entry(entry.name, entry.number)
+    result = phonebook.add_entry(entry.name, entry.number)
+    asyncio.create_task(prerender_phone_phrases())
+    return result
 
 
 @app.delete("/api/phonebook/{name}")
@@ -672,6 +741,7 @@ async def set_phonebook_call_access(name: str, update: CallAccessUpdate) -> list
     entries = phonebook.set_call_access(name, update.allowed)
     if entries is None:
         raise HTTPException(status_code=404, detail=f"No contact named '{name}'.")
+    asyncio.create_task(prerender_phone_phrases())
     return entries
 
 

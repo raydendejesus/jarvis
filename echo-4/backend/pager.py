@@ -3,9 +3,13 @@
 know about occurs - an unknown caller turned away, an allowed contact using
 Echo, Desk Guard locking the computer.
 
-Everything funnels through page_owner(), which is gated by the Sir Page toggle
-and rate-limited, so nothing outside can use it to make Echo ring his phone
-over and over (a stranger dialing repeatedly, for instance).
+This only ever limits how often ECHO RINGS SIR with a status report. It never
+limits anyone calling Echo - allowed contacts can call as often and as long as
+they like.
+
+The limits are per kind of event, so one noisy kind can't use up the budget
+of another: a run of unknown numbers can never stop a Desk Guard alert from
+getting through.
 """
 import re
 import time
@@ -13,11 +17,20 @@ import time
 import config as config_module
 import telephony
 
-COOLDOWN_SECONDS = 600
-MAX_PAGES_PER_HOUR = 6
+# The same event repeating (same number, same contact) isn't re-announced within
+# this window. Desk Guard events are the ones that matter most, so they repeat sooner.
+COOLDOWN_SECONDS = {"deskguard": 300}
+DEFAULT_COOLDOWN_SECONDS = 600
+
+# Only the kinds that strangers can trigger are capped per hour, so nobody can
+# make Echo ring sir over and over. Anything left out of this table (Desk Guard
+# alerts) is never held back. Calls beyond the cap aren't lost: they are counted
+# and mentioned at the start of the next call, and listed on the dashboard.
+HOURLY_CAP = {"blocked": 6, "guest": 12}
 
 _last_by_kind: dict[str, float] = {}
-_recent_pages: list[float] = []
+_recent_by_category: dict[str, list[float]] = {}
+_held_back: dict[str, int] = {}
 
 
 def spoken_number(number: str) -> str:
@@ -32,10 +45,17 @@ def spoken_number(number: str) -> str:
     return ", ".join(" ".join(g) for g in groups) or "a hidden number"
 
 
+def _held_back_note() -> str:
+    total = sum(_held_back.values())
+    if not total:
+        return ""
+    return f" Also, {total} other call{'s' if total != 1 else ''} came in that I didn't ring you about."
+
+
 async def page_owner(kind: str, message: str) -> bool:
-    """Calls the owner's phone and speaks `message`. `kind` keys the cooldown, so
-    the same event repeating doesn't ring again within COOLDOWN_SECONDS.
-    Returns whether a call was actually placed. Never raises."""
+    """Calls the owner's phone and speaks `message`. `kind` is "category:detail"
+    (e.g. "blocked:+1330...") - the detail keys the cooldown, the category keys
+    the hourly cap. Returns whether a call was actually placed. Never raises."""
     if not config_module.load_config().get("sir_page_enabled"):
         return False
 
@@ -44,20 +64,28 @@ async def page_owner(kind: str, message: str) -> bool:
         print("[pager] Sir Page is on but calling isn't configured, so it can't ring your phone.", flush=True)
         return False
 
+    category = kind.split(":", 1)[0]
     now = time.time()
-    if now - _last_by_kind.get(kind, 0.0) < COOLDOWN_SECONDS:
-        return False
-    _recent_pages[:] = [t for t in _recent_pages if now - t < 3600]
-    if len(_recent_pages) >= MAX_PAGES_PER_HOUR:
-        print(f"[pager] hourly page limit reached - not paging for {kind}", flush=True)
+    if now - _last_by_kind.get(kind, 0.0) < COOLDOWN_SECONDS.get(category, DEFAULT_COOLDOWN_SECONDS):
         return False
 
+    cap = HOURLY_CAP.get(category)
+    if cap is not None:
+        window = _recent_by_category.setdefault(category, [])
+        window[:] = [t for t in window if now - t < 3600]
+        if len(window) >= cap:
+            _held_back[category] = _held_back.get(category, 0) + 1
+            print(f"[pager] {category} page limit reached for this hour - holding back {kind}", flush=True)
+            return False
+        window.append(now)
+
     _last_by_kind[kind] = now
-    _recent_pages.append(now)
+    full_message = message + _held_back_note()
     try:
-        await telephony.notify_owner(cfg, message)
+        await telephony.notify_owner(cfg, full_message)
     except Exception as exc:  # noqa: BLE001 - a failed page must never break the thing that triggered it
         print(f"[pager] couldn't place the page for {kind}: {exc!r}", flush=True)
         return False
-    print(f"[pager] paged sir: {message}", flush=True)
+    _held_back.clear()
+    print(f"[pager] paged sir: {full_message}", flush=True)
     return True

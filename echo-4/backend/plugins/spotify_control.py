@@ -381,7 +381,7 @@ async def spotify_playback(args: dict) -> str:
             if duration_ms:
                 target_ms = min(target_ms, max(0, duration_ms - 1000))
             resp = await client.put(f"{API}/me/player/seek", headers=headers, params={"position_ms": target_ms})
-            done = f"Back to the start of the song." if action == "restart" else f"Jumped to {_clock(target_ms)}."
+            done = "Back to the start of the song." if action == "restart" else f"Jumped to {_clock(target_ms)}."
         elif action == "previous":
             now = await _progress()
             resp = await client.post(f"{API}/me/player/previous", headers=headers)

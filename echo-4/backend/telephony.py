@@ -97,8 +97,9 @@ PHONE_PERSONA_INBOUND = (
 
 OWNER_NICKNAME_TO_OTHERS = "Dr. Mystario"
 
-# An allowed guest can't keep the line (and the GPU) busy indefinitely.
-GUEST_MAX_CALL_SECONDS = 600
+# Allowed contacts can call as often and as long as they like; this is only a
+# ceiling so a call that was left open doesn't run forever.
+GUEST_MAX_CALL_SECONDS = 2 * 60 * 60
 
 
 def phone_persona_guest(caller_name: str) -> str:
@@ -132,12 +133,29 @@ def phone_persona_outbound(contact_name: str | None, opening_message: str) -> st
     )
 
 
+def outbound_opening(contact_name: str, opening_message: str, greeting: str, to_owner: bool) -> str:
+    """The first thing said when an outbound call is answered. One definition, so the
+    audio rendered before dialing is always exactly what is spoken on answer."""
+    if to_owner:
+        return f"Hello, sir. {opening_message}" if opening_message else "Hello, sir - it's Echo."
+    if greeting:
+        return greeting
+    hello = f"Hi {contact_name}, this is Echo" if contact_name else "Hello, this is Echo"
+    if opening_message:
+        return f"{hello}, calling on behalf of {OWNER_NICKNAME_TO_OTHERS}. {opening_message}"
+    return f"{hello}, an AI assistant calling on behalf of {OWNER_NICKNAME_TO_OTHERS}."
+
+
 async def place_outbound_call(
-    cfg: dict, to_number: str, contact_name: str, opening_message: str, greeting: str = ""
+    cfg: dict, to_number: str, contact_name: str, opening_message: str,
+    greeting: str = "", clip_id: str = "",
 ) -> dict:
     from urllib.parse import urlencode
 
-    query = urlencode({"contact": contact_name or "", "msg": opening_message or "", "greeting": greeting or ""})
+    query = urlencode({
+        "contact": contact_name or "", "msg": opening_message or "",
+        "greeting": greeting or "", "clip": clip_id or "",
+    })
     url = f"{TELNYX_API_BASE}/texml/Accounts/{cfg['account_sid']}/Calls"
     async with httpx.AsyncClient(timeout=40) as client:
         resp = await client.post(

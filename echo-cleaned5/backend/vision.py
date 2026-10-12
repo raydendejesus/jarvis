@@ -6,7 +6,9 @@ from pathlib import Path
 
 import httpx
 
-OLLAMA_URL = "http://localhost:11434/api/chat"
+import model_policy
+
+OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
 VISION_MODEL = "qwen2.5vl:7b"
 TEXT_MODEL = "echo"
 FRAME_COUNT = 6
@@ -32,7 +34,7 @@ async def describe_image(image_bytes: bytes, question: str = "Describe what you 
                 "model": VISION_MODEL,
                 "messages": [{"role": "user", "content": question, "images": [image_b64]}],
                 "stream": False,
-                "keep_alive": -1,
+                "keep_alive": model_policy.VISION_KEEP_ALIVE,
             },
         )
         resp.raise_for_status()
@@ -59,7 +61,7 @@ async def locate_point(image_bytes: bytes, description: str) -> tuple[float, flo
                 "model": VISION_MODEL,
                 "messages": [{"role": "user", "content": prompt, "images": [image_b64]}],
                 "stream": False,
-                "keep_alive": -1,
+                "keep_alive": model_policy.VISION_KEEP_ALIVE,
             },
         )
         resp.raise_for_status()
@@ -126,7 +128,7 @@ async def summarize_video(video_path: str) -> str:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 OLLAMA_URL,
-                json={"model": TEXT_MODEL, "messages": [{"role": "user", "content": prompt}], "stream": False, "keep_alive": -1},
+                json={"model": TEXT_MODEL, "messages": [{"role": "user", "content": prompt}], "stream": False, "keep_alive": model_policy.BRAIN_KEEP_ALIVE},
             )
             resp.raise_for_status()
             return resp.json()["message"]["content"]
