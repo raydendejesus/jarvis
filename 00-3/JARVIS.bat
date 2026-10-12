@@ -20,7 +20,7 @@ if errorlevel 1 (
     timeout /t 3 /nobreak >nul
 )
 
-ollama list | findstr /i "^jarvis" >nul
+ollama list | findstr /i "jarvis" >nul
 if errorlevel 1 (
     echo First-time setup: pulling qwen2.5:14b and building the jarvis persona...
     echo This is a ~9GB download and may take a while.

@@ -149,7 +149,18 @@ class SettingsUpdate(BaseModel):
     vr_mode_enabled: bool | None = None
 
 
+VOICELAB_URL = "http://127.0.0.1:8791/jarvis"
+
+
 async def synthesize(text: str) -> bytes:
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(VOICELAB_URL, json={"text": text})
+            resp.raise_for_status()
+            if resp.content:
+                return resp.content
+    except Exception as exc:  # noqa: BLE001 - fall back so Jarvis is never silent
+        print(f"[voice] custom voice unavailable ({exc}), using fallback", flush=True)
     import edge_tts
     communicate = edge_tts.Communicate(text, voice=VOICE)
     audio_chunks = bytearray()

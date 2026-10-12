@@ -35,6 +35,30 @@ NGROK_API = "http://127.0.0.1:4040/api/tunnels"
 
 server_process = None
 ngrok_process = None
+voicelab_process = None
+
+VOICELAB_DIR = Path(r"O:\VoiceLab")
+VOICELAB_URL = "http://127.0.0.1:8791"
+
+
+def start_voicelab_if_needed() -> None:
+    global voicelab_process
+    try:
+        httpx.get(f"{VOICELAB_URL}/health", timeout=1.5)
+        return
+    except httpx.HTTPError:
+        pass
+    py = VOICELAB_DIR / "venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        print(f"[tray] voice engine not found at {py}, Jarvis will use the fallback voice", flush=True)
+        return
+    voicelab_process = subprocess.Popen(
+        [str(py), str(VOICELAB_DIR / "voicelab.py")],
+        cwd=str(VOICELAB_DIR),
+        stdout=open(VOICELAB_DIR / "voicelab_out.log", "a", encoding="utf-8"),
+        stderr=open(VOICELAB_DIR / "voicelab_err.log", "a", encoding="utf-8"),
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
 
 
 def is_server_running() -> bool:
@@ -188,6 +212,8 @@ def quit_app(icon, item) -> None:
         server_process.terminate()
     if ngrok_process is not None:
         ngrok_process.terminate()
+    if voicelab_process is not None:
+        voicelab_process.terminate()
 
 
 def start_listener_thread() -> None:
@@ -210,6 +236,7 @@ def watchdog_loop() -> None:
                 print("[tray] backend server is down, restarting it", flush=True)
                 start_server_if_needed()
             start_ngrok_if_needed()
+            start_voicelab_if_needed()
         except Exception as exc:  # noqa: BLE001 - the watchdog itself must never die
             print(f"[tray] watchdog error: {exc}", flush=True)
 
@@ -220,6 +247,7 @@ def start_watchdog_thread() -> None:
 
 
 def main() -> None:
+    start_voicelab_if_needed()
     start_server_if_needed()
     start_ngrok_if_needed()
     start_listener_thread()
