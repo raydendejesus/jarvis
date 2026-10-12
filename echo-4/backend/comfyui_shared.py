@@ -104,6 +104,16 @@ async def wait_for_history(prompt_id: str) -> dict | None:
             hist_resp = await client.get(f"{COMFYUI_URL}/history/{prompt_id}")
             history = hist_resp.json()
             if prompt_id in history:
+                status = history[prompt_id].get("status", {})
+                if status.get("status_str") == "error":
+                    for kind, detail in status.get("messages", []):
+                        if kind == "execution_error":
+                            print(
+                                f"[comfyui_shared] job failed in node {detail.get('node_id')} "
+                                f"({detail.get('node_type')}): {detail.get('exception_message')}",
+                                flush=True,
+                            )
+                    return None
                 return history[prompt_id].get("outputs", {})
             await asyncio.sleep(2)
     return None
