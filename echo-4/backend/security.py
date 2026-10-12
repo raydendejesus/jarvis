@@ -146,5 +146,11 @@ async def guard_loop() -> None:
                         _log_event(f"Unrecognized face (similarity {score:.2f} < {threshold}) - locking.", frame)
                         await asyncio.to_thread(lock_workstation)
                         was_locked = True
+                        import pager  # local: pager -> telephony, which security must not pull in at import time
+
+                        asyncio.create_task(pager.page_owner(
+                            "deskguard",
+                            "Sir, someone I didn't recognize was at your computer, so I've locked it.",
+                        ))
 
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)

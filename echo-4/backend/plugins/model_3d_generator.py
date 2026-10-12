@@ -17,6 +17,7 @@ detailed_prompt drives generation one of two ways:
 """
 import json
 import random
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +45,11 @@ SEED_NODE_IDS = ("3", "12", "18", "23")
 # Sampling plus UV unwrap/texture bake takes 3-6 minutes on a 3090 - far past
 # the 180s default that suits plain image generation.
 GENERATION_TIMEOUT_SECONDS_3D = 900
+
+# The brain was seen calling this tool twice for one request, which ran the GPU
+# hard a second time for nothing - refuse a new model right after one finishes.
+MIN_SECONDS_BETWEEN_MODELS = 120
+_last_finished_at = float("-inf")
 
 
 def _load_workflow_template() -> dict:
@@ -82,9 +88,18 @@ async def _run_generation(workflow: dict) -> bytes | None:
 
 
 async def generate_3d_model(args: dict) -> str:
+    global _last_finished_at
     detailed_prompt = (args.get("detailed_prompt") or "").strip()
     if not detailed_prompt:
         return "I need an actual detailed description to generate from, not just a short request."
+
+    since_last = time.monotonic() - _last_finished_at
+    if since_last < MIN_SECONDS_BETWEEN_MODELS:
+        return (
+            f"A 3D model finished {int(since_last)}s ago and is already on the 3D canvas, so this request is "
+            "already fulfilled - tell sir it's there. A new model can't start back-to-back (the GPU needs a "
+            f"short rest); a separate request made more than {MIN_SECONDS_BETWEEN_MODELS}s after the last one works normally."
+        )
     reference_query = (args.get("reference_search_query") or "").strip()
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -122,6 +137,7 @@ async def generate_3d_model(args: dict) -> str:
     glb_filename = f"{stamp}.glb"
     (OUTPUT_DIR / glb_filename).write_bytes(model_bytes)
     model3d_state.set_content(glb_filename, "Generated 3D Model")
+    _last_finished_at = time.monotonic()
 
     ref_note = " using a reference photo I found first" if used_reference else " (built from a starting image I generated from the description)"
     return f"3D model generated{ref_note} and shown on the 3D canvas."

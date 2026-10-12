@@ -18,6 +18,8 @@ import canvas_state
 import config as config_module
 import discord_auth
 import github_auth
+import pager
+import spotify_auth
 import google_auth
 import location
 import memory
@@ -142,6 +144,7 @@ class SettingsUpdate(BaseModel):
     desk_guard_threshold: float | None = None
     calling_enabled: bool | None = None
     call_notifications_enabled: bool | None = None
+    sir_page_enabled: bool | None = None
     location_mode: str | None = None
     browser_control_enabled: bool | None = None
     browser_pixel_fallback_enabled: bool | None = None
@@ -239,7 +242,38 @@ def _extract_embedded_html(text: str) -> str | None:
     return None
 
 
+async def ensure_ollama_running() -> bool:
+    """The brain lives in Ollama; if it has stopped (closed, crashed, never
+    started), start it and wait rather than failing every request with a
+    connection error."""
+    import subprocess
+
+    async def _up() -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                await client.get("http://localhost:11434/api/tags")
+            return True
+        except httpx.HTTPError:
+            return False
+
+    if await _up():
+        return True
+    print("[ollama] not responding - starting it", flush=True)
+    try:
+        subprocess.Popen(["ollama", "serve"], creationflags=0x08000000)
+    except OSError as exc:
+        print(f"[ollama] couldn't start it: {exc}", flush=True)
+        return False
+    for _ in range(30):
+        await asyncio.sleep(1)
+        if await _up():
+            return True
+    return False
+
+
 async def run_chat_turn(user_message: str, cfg: dict) -> str:
+    if not await ensure_ollama_running():
+        return "My language model isn't responding and I couldn't start it just now, sir."
     conversation_history.append({"role": "user", "content": user_message})
 
     messages = list(conversation_history)
@@ -360,6 +394,7 @@ async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phon
     history = telephony.call_histories.setdefault(call_sid, [])
     history.append({"role": "user", "content": user_text})
     messages = [{"role": "system", "content": system_prompt}] + history
+    allowed_tool_names = {t["function"]["name"] for t in phone_tools}
 
     for _ in range(MAX_TOOL_ITERATIONS):
         async with httpx.AsyncClient(timeout=120) as client:
@@ -383,7 +418,13 @@ async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phon
             fn = call["function"]
             name = fn["name"]
             args = fn.get("arguments") or {}
-            result = await tools.execute_tool(name, args)
+            # execute_tool dispatches any tool the server knows about, not only
+            # the ones offered on this call - so a caller (or a confused model)
+            # naming one that wasn't offered must be refused here.
+            if name not in allowed_tool_names:
+                result = "That isn't available during a phone call."
+            else:
+                result = await tools.execute_tool(name, args)
             tool_msg = {"role": "tool", "content": result, "name": name}
             messages.append(tool_msg)
             history.append(tool_msg)
@@ -415,9 +456,43 @@ async def telephony_voice(request: Request) -> Response:
             media_type="application/xml",
         )
 
-    telephony.call_context[call_sid] = {"direction": "inbound"}
+    from_number = form.get("From", "")
+    policy = phonebook.caller_policy(from_number, cfg.get("owner_number"))
+    if policy["role"] == "blocked":
+        phonebook.record_attempt(from_number, policy["name"], policy["reason"])
+        print(f"[telephony] turned away an inbound call from {from_number}: {policy['reason']}", flush=True)
+        if policy["name"]:
+            note = f"Sir, {policy['name']} just tried to call me, but their access is switched off, so I turned them away."
+        else:
+            note = f"Sir, an unknown number, {pager.spoken_number(from_number)}, just tried to call me, and I turned them away."
+        asyncio.create_task(pager.page_owner(f"blocked:{from_number}", note))
+        return Response(
+            content="<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say>Sorry, this line isn't available to you. Goodbye.</Say><Hangup/></Response>",
+            media_type="application/xml",
+        )
+
+    caller_name = policy["name"] or phonebook.name_for_number(from_number)
+    telephony.call_context[call_sid] = {
+        "direction": "inbound",
+        "role": policy["role"],
+        "caller_name": caller_name,
+        "caller_number": from_number,
+        "started_at": time.time(),
+    }
     telephony.call_last_response_at[call_sid] = time.time()
-    clip_id = await _speak_clip("Hello, this is Echo. How can I help you?")
+    if policy["role"] == "guest":
+        asyncio.create_task(
+            pager.page_owner(f"guest:{caller_name}", f"Sir, {caller_name} is on a call with me right now.")
+        )
+        opening = (
+            f"Hi {caller_name}, this is Echo, {telephony.OWNER_NICKNAME_TO_OTHERS}'s AI assistant. "
+            "How can I help you?"
+        )
+    elif caller_name and caller_name.strip().lower() != "sir":
+        opening = f"Hi {caller_name}, this is Echo. How can I help you?"
+    else:
+        opening = "Hello, sir. How can I help you?"
+    clip_id = await _speak_clip(opening)
     return Response(content=telephony.gather_texml(cfg, clip_id), media_type="application/xml")
 
 
@@ -428,6 +503,7 @@ async def telephony_outbound_voice(request: Request) -> Response:
     call_sid = form.get("CallSid", "")
     contact_name = request.query_params.get("contact", "")
     opening_message = request.query_params.get("msg", "")
+    greeting = request.query_params.get("greeting", "").strip()
 
     telephony.call_context[call_sid] = {
         "direction": "outbound",
@@ -441,11 +517,14 @@ async def telephony_outbound_voice(request: Request) -> Response:
 
     if calling_owner:
         opening = f"Hello, sir. {opening_message}" if opening_message else "Hello, sir - it's Echo."
+    elif greeting:
+        opening = greeting
     else:
+        hello = f"Hi {contact_name}, this is Echo" if contact_name else "Hello, this is Echo"
         opening = (
-            f"Hello, this is Echo, calling on behalf of {telephony.OWNER_NICKNAME_TO_OTHERS}. {opening_message}"
+            f"{hello}, calling on behalf of {telephony.OWNER_NICKNAME_TO_OTHERS}. {opening_message}"
             if opening_message
-            else f"Hello, this is Echo, an AI assistant calling on behalf of {telephony.OWNER_NICKNAME_TO_OTHERS}."
+            else f"{hello}, an AI assistant calling on behalf of {telephony.OWNER_NICKNAME_TO_OTHERS}."
         )
     # Recorded as something Echo already said, so the model doesn't re-introduce
     # itself again on the first real reply - it otherwise has no way of knowing
@@ -463,7 +542,13 @@ async def telephony_gather(request: Request) -> Response:
     call_sid = form.get("CallSid", "")
     speech_text = form.get("SpeechResult", "")
 
-    context = telephony.call_context.get(call_sid, {"direction": "inbound"})
+    context = telephony.call_context.get(call_sid)
+    if context is None:
+        # The server restarted mid-call, so who this is was lost. Never assume
+        # the owner - end it rather than hand an unknown caller owner access.
+        clip_id = await _speak_clip("Sorry, I lost track of this call. Please call back. Goodbye.")
+        return Response(content=telephony.say_and_hangup_texml(cfg, clip_id), media_type="application/xml")
+
     dialed_number = form.get("To", "")
     is_owner = cfg and dialed_number and dialed_number == cfg.get("owner_number")
 
@@ -472,6 +557,17 @@ async def telephony_gather(request: Request) -> Response:
             context.get("contact_name"), context.get("opening_message", "")
         )
         phone_tools = tools.PHONE_TOOLS_OUTBOUND
+    elif context.get("role") == "guest":
+        # An allowed contact: re-checked every turn so switching their toggle
+        # off in the phone book takes effect mid-call, and capped in length.
+        policy = phonebook.caller_policy(context.get("caller_number", ""), cfg.get("owner_number") if cfg else None)
+        too_long = time.time() - context.get("started_at", time.time()) > telephony.GUEST_MAX_CALL_SECONDS
+        if policy["role"] != "guest" or too_long:
+            line = "I'm sorry, I have to end this call now. Goodbye." if too_long else "I'm sorry, I can't continue this call. Goodbye."
+            clip_id = await _speak_clip(line)
+            return Response(content=telephony.say_and_hangup_texml(cfg, clip_id), media_type="application/xml")
+        system_prompt = telephony.phone_persona_guest(context.get("caller_name") or "the caller")
+        phone_tools = tools.PHONE_TOOLS_GUEST
     else:
         system_prompt = telephony.PHONE_PERSONA_INBOUND
         phone_tools = tools.PHONE_TOOLS_INBOUND
@@ -565,6 +661,23 @@ async def add_phonebook_entry(entry: PhonebookEntry) -> list[dict]:
 @app.delete("/api/phonebook/{name}")
 async def delete_phonebook_entry(name: str) -> list[dict]:
     return phonebook.delete_entry(name)
+
+
+class CallAccessUpdate(BaseModel):
+    allowed: bool
+
+
+@app.post("/api/phonebook/{name}/call_access")
+async def set_phonebook_call_access(name: str, update: CallAccessUpdate) -> list[dict]:
+    entries = phonebook.set_call_access(name, update.allowed)
+    if entries is None:
+        raise HTTPException(status_code=404, detail=f"No contact named '{name}'.")
+    return entries
+
+
+@app.get("/api/phonebook/blocked_calls")
+async def get_blocked_calls() -> list[dict]:
+    return phonebook.recent_attempts()
 
 
 @app.post("/api/upload", response_model=ChatResponse)
@@ -737,6 +850,13 @@ async def list_connections() -> list[dict]:
             "connected": github_auth.is_connected(),
         },
         {
+            "name": "spotify",
+            "label": "Spotify",
+            "auth_style": "oauth",
+            "configured": spotify_auth.is_configured(),
+            "connected": spotify_auth.is_connected(),
+        },
+        {
             "name": "discord",
             "label": "Discord",
             "auth_style": "token",
@@ -772,6 +892,48 @@ async def github_save_credentials(update: OAuthClientCredentials) -> dict:
     if not update.client_id.strip() or not update.client_secret.strip():
         raise HTTPException(status_code=400, detail="Both the Client ID and Client secret are required.")
     github_auth.save_client_config(update.client_id.strip(), update.client_secret.strip())
+    return {"ok": True}
+
+
+@app.post("/api/connections/spotify/credentials")
+async def spotify_save_credentials(update: OAuthClientCredentials) -> dict:
+    if not update.client_id.strip() or not update.client_secret.strip():
+        raise HTTPException(status_code=400, detail="Both the Client ID and Client secret are required.")
+    spotify_auth.save_client_config(update.client_id.strip(), update.client_secret.strip())
+    return {"ok": True}
+
+
+@app.get("/api/connections/spotify/start")
+async def spotify_connect_start() -> Response:
+    from fastapi.responses import RedirectResponse
+    url = spotify_auth.build_auth_url()
+    if url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Spotify isn't configured yet - see backend/spotify_oauth_config.example.json.",
+        )
+    return RedirectResponse(url)
+
+
+@app.get("/api/connections/spotify/callback")
+async def spotify_connect_callback(request: Request) -> Response:
+    from fastapi.responses import RedirectResponse
+    code = request.query_params.get("code")
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(f"/?spotify_connect=error&detail={error}")
+    if not code:
+        return RedirectResponse("/?spotify_connect=error&detail=no_code")
+    try:
+        await spotify_auth.exchange_code(code)
+    except Exception as exc:  # noqa: BLE001 - surface to the dashboard, not a raw 500
+        return RedirectResponse(f"/?spotify_connect=error&detail={exc}")
+    return RedirectResponse("/?spotify_connect=success")
+
+
+@app.post("/api/connections/spotify/disconnect")
+async def spotify_disconnect() -> dict:
+    spotify_auth.disconnect()
     return {"ok": True}
 
 

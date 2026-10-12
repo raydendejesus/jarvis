@@ -21,3 +21,6 @@ backend/github_oauth_config.json
 backend/connections/
 backend/canvas_state.json
 backend/model3d_state.json
+backend/spotify_oauth_config.json
+backend/call_attempts.json
+backend/plugins_data/app_shortcuts.json

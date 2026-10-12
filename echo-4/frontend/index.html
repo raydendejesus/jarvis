@@ -27,11 +27,42 @@
       <button type="submit" class="hud-btn">Add</button>
     </form>
     <ul id="phoneBookList" class="phonebook-list"></ul>
+    <details class="blocked-calls" id="blockedCalls" hidden>
+      <summary>Turned-away calls <span id="blockedCount"></span></summary>
+      <ul id="blockedCallsList" class="blocked-list"></ul>
+    </details>
     <p class="hint-text">
-      Say "Echo, call &lt;name&gt;" to have Echo place a call to a saved contact.
-      Only numbers listed here (or ones you say directly) can be called - Echo
-      won't dial anyone not named here or given explicitly.
+      Say "Echo, call &lt;name&gt; about &lt;subject&gt;" and Echo greets them by name and opens
+      with the subject. Only numbers listed here (or ones you say directly) can be called.
+      <strong>can call Echo</strong> controls who may phone Echo: contacts switched on are let in
+      (and greeted by name); everyone else, including any number not saved here, is turned away.
     </p>
+
+    <section class="toggles-panel" id="togglesPanel">
+      <h2 class="side-heading">Toggles <span id="toggleCount" class="side-count"></span></h2>
+      <input type="search" id="toggleFilter" class="toggle-filter" placeholder="Filter toggles..." autocomplete="off" />
+      <div class="quick-toggles" id="quickToggles">
+        <h3 class="tab-subheading">Core</h3>
+        <label class="switch-row"><span>Echo enabled</span><input type="checkbox" id="toggle-ai_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Also listen via this tab's mic</span><input type="checkbox" id="toggle-dashboard-mic" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Screen access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-screen_access" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Camera access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-camera_access" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Desk Guard</span><span class="vram-tag">&lt;1 GB</span><input type="checkbox" id="toggle-desk_guard_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Calling</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-calling_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Unanswered-call notifications</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-call_notifications_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Sir Page</span><span class="vram-tag">phones you when something happens</span><input type="checkbox" id="toggle-sir_page_enabled" /><span class="switch"></span></label>
+        <button type="button" id="toggle-location_mode" class="hud-btn location-cycle-btn">Location: OFF (click to change)</button>
+        <label class="switch-row"><span>Browser control</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-browser_control_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>&nbsp;&nbsp;&rarr; allow direct screen-control fallback</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-browser_pixel_fallback_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>Code canvas</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-code_canvas_enabled" /><span class="switch"></span></label>
+        <label class="switch-row"><span>VR Mode</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-vr_mode_enabled" /><span class="switch"></span></label>
+        <h3 class="tab-subheading">Plugins</h3>
+        <div id="pluginsListConnected"></div>
+        <div id="pluginsListStandalone"></div>
+      </div>
+      <p id="settingsError" class="hint-text error"></p>
+      <p id="pluginsError" class="hint-text error"></p>
+    </section>
   </aside>
 
   <div class="col-divider"></div>
@@ -49,6 +80,7 @@
       <span class="indicator" id="ind-desk_guard_enabled" data-label="GRD">GRD</span>
       <span class="indicator" id="ind-calling_enabled" data-label="CALL">CALL</span>
       <span class="indicator" id="ind-call_notifications_enabled" data-label="NOTIFY">NOTIFY</span>
+      <span class="indicator" id="ind-sir_page_enabled" data-label="PAGE">PAGE</span>
       <span class="indicator" id="ind-location_mode" data-label="LOC">LOC: OFF</span>
       <span class="indicator" id="ind-browser_control_enabled" data-label="BRWS">BRWS</span>
       <span class="indicator" id="ind-code_canvas_enabled" data-label="CODE">CODE</span>
@@ -75,54 +107,21 @@
 
     <div class="control-panel">
       <div class="tab-bar" role="tablist">
-        <button type="button" class="tab-btn active" data-tab="settings">Settings</button>
-        <button type="button" class="tab-btn" data-tab="plugins">Plugins</button>
+        <button type="button" class="tab-btn active" data-tab="settings">Notes</button>
         <button type="button" class="tab-btn" data-tab="connections">Connections</button>
         <button type="button" class="tab-btn" data-tab="audio">Audio</button>
       </div>
 
       <div class="tab-panel" id="tab-settings">
-        <label class="switch-row"><span>Echo enabled</span><input type="checkbox" id="toggle-ai_enabled" /><span class="switch"></span></label>
-        <label class="switch-row"><span>Also listen via this tab's mic</span><input type="checkbox" id="toggle-dashboard-mic" /><span class="switch"></span></label>
-        <p class="hint-text">Off by default - the always-on background listener already hears you, so leaving both on can make Echo answer twice from two slightly different transcriptions of the same thing.</p>
-        <label class="switch-row"><span>Screen access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-screen_access" /><span class="switch"></span></label>
-        <label class="switch-row"><span>Camera access</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-camera_access" /><span class="switch"></span></label>
-        <label class="switch-row"><span>Desk Guard</span><span class="vram-tag">&lt;1 GB</span><input type="checkbox" id="toggle-desk_guard_enabled" /><span class="switch"></span></label>
-        <label class="switch-row"><span>Calling</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-calling_enabled" /><span class="switch"></span></label>
-        <label class="switch-row"><span>Unanswered-call notifications</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-call_notifications_enabled" /><span class="switch"></span></label>
-        <button type="button" id="toggle-location_mode" class="hud-btn location-cycle-btn">Location: OFF (click to change)</button>
-        <p class="hint-text">Click cycles OFF &rarr; PC &rarr; PHONE &rarr; OFF. Only the device matching the current mode shares its position. No local model.</p>
-        <label class="switch-row"><span>Browser control</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-browser_control_enabled" /><span class="switch"></span></label>
-        <label class="switch-row"><span>&nbsp;&nbsp;&rarr; allow direct screen-control fallback</span><span class="vram-tag">~6 GB when used</span><input type="checkbox" id="toggle-browser_pixel_fallback_enabled" /><span class="switch"></span></label>
-        <p class="hint-text">
-          Browser control lets Echo click and type in your active browser tab through his own
-          on-screen cursor when you ask him to - it never touches your real mouse. The fallback
-          below it takes direct pixel-level control for pages it can't otherwise read (reusing
-          the same vision model as Screen/Camera access), and always shows an on-screen warning
-          you must approve first.
-        </p>
-        <label class="switch-row"><span>Code canvas</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-code_canvas_enabled" /><span class="switch"></span></label>
-        <p class="hint-text">
-          Lets Echo build a real, live website/app/demo and show it in a preview panel when you
-          ask - "build me a website for X." Rendered sandboxed, with no access to this dashboard.
-        </p>
-        <label class="switch-row"><span>VR Mode</span><span class="vram-tag">no local model</span><input type="checkbox" id="toggle-vr_mode_enabled" /><span class="switch"></span></label>
-        <p class="hint-text">
-          For viewing this dashboard in a VR headset via Virtual Desktop: trusts the headset's own
-          microphone (normally blocked, since it's usually a sign the real default mic got silently
-          swapped for a virtual one). Turn this on before putting the headset on, off when done -
-          requires restarting Echo to take effect either way.
-        </p>
-        <p id="settingsError" class="hint-text error"></p>
-      </div>
-
-      <div class="tab-panel" id="tab-plugins" hidden>
-        <h3 class="tab-subheading">Connected-account plugins</h3>
-        <div id="pluginsListConnected"></div>
-        <h3 class="tab-subheading">Standalone plugins</h3>
-        <div id="pluginsListStandalone"></div>
-        <p class="hint-text">Dashboard/native-listener only - never available over a phone call. New plugins dropped into <code>backend/plugins/</code> appear here automatically.</p>
-        <p id="pluginsError" class="hint-text error"></p>
+        <h3 class="tab-subheading">What the toggles do</h3>
+        <p class="hint-text">All switches live in the <strong>Toggles</strong> panel under the phone book - hover a row for its memory cost.</p>
+        <p class="hint-text"><strong>Also listen via this tab's mic</strong> - off by default: the always-on background listener already hears you, so leaving both on can make Echo answer twice from two slightly different transcriptions of the same thing.</p>
+        <p class="hint-text"><strong>Sir Page</strong> - when on, Echo phones <em>you</em> and says what happened: an unknown number (or a contact whose access is off) called and was turned away, an allowed contact is on a call with Echo, or Desk Guard saw someone it didn't recognize and locked the computer. Repeats are rate-limited (10 minutes per event, 6 calls an hour) so nobody can make it ring you nonstop. Needs calling set up.</p>
+        <p class="hint-text"><strong>Location</strong> - click cycles OFF &rarr; PC &rarr; PHONE &rarr; OFF. Only the device matching the current mode shares its position. No local model.</p>
+        <p class="hint-text"><strong>Browser control</strong> - lets Echo click and type in your active browser tab through his own on-screen cursor when you ask him to; it never touches your real mouse. The direct screen-control fallback takes pixel-level control for pages it can't otherwise read (reusing the same vision model as Screen/Camera access), and always shows an on-screen warning you must approve first.</p>
+        <p class="hint-text"><strong>Code canvas</strong> - lets Echo build a real, live website/app/demo and show it in a preview panel when you ask. Rendered sandboxed, with no access to this dashboard.</p>
+        <p class="hint-text"><strong>VR Mode</strong> - for viewing this dashboard in a VR headset via Virtual Desktop: trusts the headset's own microphone (normally blocked, since it's usually a sign the real default mic got silently swapped for a virtual one). Turn this on before putting the headset on, off when done - requires restarting Echo to take effect either way.</p>
+        <p class="hint-text"><strong>Plugins</strong> are dashboard/native-listener only - never available over a phone call. New plugins dropped into <code>backend/plugins/</code> appear in the Toggles panel automatically. Plugins that need an account show which connection they need on hover.</p>
       </div>
 
       <div class="tab-panel" id="tab-connections" hidden>

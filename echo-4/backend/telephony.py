@@ -97,6 +97,24 @@ PHONE_PERSONA_INBOUND = (
 
 OWNER_NICKNAME_TO_OTHERS = "Dr. Mystario"
 
+# An allowed guest can't keep the line (and the GPU) busy indefinitely.
+GUEST_MAX_CALL_SECONDS = 600
+
+
+def phone_persona_guest(caller_name: str) -> str:
+    return (
+        f"You are on a live phone call. The caller is {caller_name}, a contact that "
+        f"{OWNER_NICKNAME_TO_OTHERS} has given permission to talk to you - they are NOT "
+        f"{OWNER_NICKNAME_TO_OTHERS}, so never call them 'sir'. You are Echo, "
+        f"{OWNER_NICKNAME_TO_OTHERS}'s AI assistant. You can chat and help with general questions "
+        f"and look things up on the web. You have no access to {OWNER_NICKNAME_TO_OTHERS}'s private "
+        "information, accounts, files, messages, contacts, memories or devices, and you must never "
+        f"share anything personal about {OWNER_NICKNAME_TO_OTHERS} or act on his behalf (placing "
+        "calls, controlling the computer, sending messages); if asked, politely say that isn't "
+        "something you can do for them. Keep replies short and natural to say aloud in a real-time "
+        "conversation, and say a clear goodbye when the conversation naturally concludes."
+    )
+
 
 def phone_persona_outbound(contact_name: str | None, opening_message: str) -> str:
     who = contact_name or "the person you are calling"
@@ -114,10 +132,12 @@ def phone_persona_outbound(contact_name: str | None, opening_message: str) -> st
     )
 
 
-async def place_outbound_call(cfg: dict, to_number: str, contact_name: str, opening_message: str) -> dict:
+async def place_outbound_call(
+    cfg: dict, to_number: str, contact_name: str, opening_message: str, greeting: str = ""
+) -> dict:
     from urllib.parse import urlencode
 
-    query = urlencode({"contact": contact_name or "", "msg": opening_message or ""})
+    query = urlencode({"contact": contact_name or "", "msg": opening_message or "", "greeting": greeting or ""})
     url = f"{TELNYX_API_BASE}/texml/Accounts/{cfg['account_sid']}/Calls"
     async with httpx.AsyncClient(timeout=40) as client:
         resp = await client.post(

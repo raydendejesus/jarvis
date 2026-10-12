@@ -325,7 +325,7 @@ function initRecognition() {
   }
 }
 
-const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled", "vr_mode_enabled"];
+const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "sir_page_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled", "vr_mode_enabled"];
 
 function setIndicator(key, active) {
   const el = document.getElementById(`ind-${key}`);
@@ -621,16 +621,76 @@ function renderPhoneBook(entries) {
   list.innerHTML = "";
   for (const entry of entries) {
     const li = document.createElement("li");
+
     const info = document.createElement("span");
-    info.innerHTML = `<span class="pb-name">${entry.name}</span><br><span class="pb-number">${entry.number}</span>`;
+    const nameEl = document.createElement("span");
+    nameEl.className = "pb-name";
+    nameEl.textContent = entry.name;
+    const numberEl = document.createElement("span");
+    numberEl.className = "pb-number";
+    numberEl.textContent = entry.number;
+    info.append(nameEl, document.createElement("br"), numberEl);
+
+    const access = document.createElement("label");
+    access.className = "switch-row pb-access";
+    access.title = "When on, this contact can phone Echo. When off (or if the number isn't saved here), Echo turns the call away.";
+    const accessText = document.createElement("span");
+    accessText.textContent = "can call Echo";
+    const accessInput = document.createElement("input");
+    accessInput.type = "checkbox";
+    accessInput.checked = entry.can_call_echo === true;
+    const accessSwitch = document.createElement("span");
+    accessSwitch.className = "switch";
+    access.append(accessText, accessInput, accessSwitch);
+    accessInput.addEventListener("change", async () => {
+      try {
+        const resp = await fetch(`/api/phonebook/${encodeURIComponent(entry.name)}/call_access`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ allowed: accessInput.checked }),
+        });
+        if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+        renderPhoneBook(await resp.json());
+      } catch (err) {
+        accessInput.checked = !accessInput.checked;
+        console.error("Failed to change call access:", err);
+      }
+    });
+
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.className = "pb-remove";
     delBtn.textContent = "remove";
     delBtn.addEventListener("click", () => deletePhoneBookEntry(entry.name));
-    li.appendChild(info);
-    li.appendChild(delBtn);
+
+    const actions = document.createElement("div");
+    actions.className = "pb-actions";
+    actions.append(access, delBtn);
+
+    li.append(info, actions);
     list.appendChild(li);
+  }
+}
+
+async function loadBlockedCalls() {
+  const box = document.getElementById("blockedCalls");
+  const list = document.getElementById("blockedCallsList");
+  const count = document.getElementById("blockedCount");
+  if (!box || !list) return;
+  try {
+    const resp = await fetch("/api/phonebook/blocked_calls");
+    const attempts = await resp.json();
+    list.innerHTML = "";
+    box.hidden = attempts.length === 0;
+    if (count) count.textContent = attempts.length ? `(${attempts.length})` : "";
+    for (const attempt of attempts) {
+      const li = document.createElement("li");
+      li.textContent = `${attempt.name || attempt.number} - ${new Date(attempt.time * 1000).toLocaleString()}`;
+      li.title = attempt.reason + (attempt.name ? ` (${attempt.number})` : "");
+      list.appendChild(li);
+    }
+  } catch (err) {
+    console.error("Failed to load turned-away calls:", err);
   }
 }
 
@@ -658,6 +718,8 @@ function initPhoneBookPanel() {
   const form = document.getElementById("phoneBookForm");
   if (!form) return;
   loadPhoneBook();
+  loadBlockedCalls();
+  setInterval(loadBlockedCalls, 30000);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const nameEl = document.getElementById("pbName");
@@ -741,25 +803,16 @@ async function loadPlugins() {
     const connected = plugins.filter((p) => p.related_connection);
     const standalone = plugins.filter((p) => !p.related_connection);
 
-    if (!connected.length) {
-      connectedEl.innerHTML = '<p class="hint-text">None yet.</p>';
-    } else {
-      for (const plugin of connected) {
-        const row = buildPluginRow(plugin, errorEl);
-        const hint = document.createElement("p");
-        hint.className = "hint-text";
-        hint.textContent = `Needs the "${plugin.related_connection}" connection - see the Connections tab.`;
-        connectedEl.append(row, hint);
-      }
+    for (const plugin of connected) {
+      const row = buildPluginRow(plugin, errorEl);
+      row.title = `Needs the "${plugin.related_connection}" connection - see the Connections tab.`;
+      connectedEl.appendChild(row);
     }
-
-    if (!standalone.length) {
-      standaloneEl.innerHTML = '<p class="hint-text">None yet.</p>';
-    } else {
-      for (const plugin of standalone) {
-        standaloneEl.appendChild(buildPluginRow(plugin, errorEl));
-      }
+    for (const plugin of standalone) {
+      standaloneEl.appendChild(buildPluginRow(plugin, errorEl));
     }
+    decorateToggleTooltips();
+    updateToggleCount();
   } catch (err) {
     console.error("Failed to load plugins:", err);
   }
@@ -910,7 +963,8 @@ async function loadConnections() {
 function checkConnectionRedirectResult() {
   const params = new URLSearchParams(window.location.search);
   const service = params.get("google_connect") !== null ? "google"
-    : params.get("github_connect") !== null ? "github" : null;
+    : params.get("github_connect") !== null ? "github"
+    : params.get("spotify_connect") !== null ? "spotify" : null;
   if (!service) return;
   const result = params.get(`${service}_connect`);
   const msgEl = document.getElementById("connectionsStatusMsg");
@@ -955,13 +1009,53 @@ function initTabs() {
   } catch (err) {
     // storage unavailable - default to settings
   }
+  if (!document.getElementById(`tab-${saved}`)) saved = "settings";
   activateTab(saved);
+}
+
+function updateToggleCount() {
+  const box = document.getElementById("quickToggles");
+  const el = document.getElementById("toggleCount");
+  if (!box || !el) return;
+  const boxes = [...box.querySelectorAll('input[type="checkbox"]')];
+  el.textContent = `${boxes.filter((b) => b.checked).length}/${boxes.length} on`;
+}
+
+function decorateToggleTooltips() {
+  for (const row of document.querySelectorAll("#quickToggles .switch-row")) {
+    const tag = row.querySelector(".vram-tag");
+    if (tag && !row.title) row.title = tag.textContent;
+  }
+}
+
+function initToggleFilter() {
+  const input = document.getElementById("toggleFilter");
+  const box = document.getElementById("quickToggles");
+  if (!input || !box) return;
+  const apply = () => {
+    const query = input.value.trim().toLowerCase();
+    for (const row of box.querySelectorAll(".switch-row, .location-cycle-btn")) {
+      row.hidden = query !== "" && !row.textContent.toLowerCase().includes(query);
+    }
+  };
+  input.addEventListener("input", apply);
+  box.addEventListener("change", updateToggleCount);
+  // Settings and plugin states load asynchronously and flip checkboxes without
+  // a change event, so keep the count and filter in step with what's on screen.
+  setInterval(() => {
+    updateToggleCount();
+    decorateToggleTooltips();
+    if (input.value) apply();
+  }, 2500);
+  decorateToggleTooltips();
+  updateToggleCount();
 }
 
 initRecognition();
 initDashboardMicToggle();
 initSettingsPanel();
 initTabs();
+initToggleFilter();
 initFileAttach();
 initEnrollButton();
 initAudioPanel();

@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import io
+import re
 import time
 
 import cv2
@@ -238,7 +239,7 @@ CALL_PHONE_SCHEMA = {
             "type": "object",
             "properties": {
                 "name_or_number": {"type": "string", "description": "A phone book contact's name, or a raw phone number"},
-                "message": {"type": "string", "description": "Optional message to relay when the call connects, e.g. 'let them know sir will be 10 minutes late'"},
+                "message": {"type": "string", "description": "What the call is about, in plain words, e.g. 'dinner tonight' or 'sir will be 10 minutes late'. Echo turns this into a natural opening greeting for the person. Leave empty if sir gave no reason."},
             },
             "required": ["name_or_number"],
         },
@@ -294,6 +295,9 @@ def available_schemas(config: dict) -> list[dict]:
 # Echo and have it build them a website or read what's on the desk's screen.
 PHONE_TOOLS_OUTBOUND = [s for s in ALWAYS_ON_SCHEMAS if s["function"]["name"] != "remember"]
 PHONE_TOOLS_INBOUND = ALWAYS_ON_SCHEMAS
+# A phone book contact who was allowed in: web lookups only - no memory, no
+# saved knowledge, nothing about sir.
+PHONE_TOOLS_GUEST = [s for s in ALWAYS_ON_SCHEMAS if s["function"]["name"] in ("web_search", "fetch_webpage")]
 
 
 def _web_search_sync(query: str, max_results: int = 5) -> list[dict]:
@@ -545,6 +549,65 @@ async def write_canvas_code(args: dict) -> str:
     return f"Updated the canvas{f' - {title}' if title else ''}. Sir can see it live on the dashboard now."
 
 
+async def _compose_call_greeting(contact_name: str, subject: str) -> str:
+    """Turns "call Austin about dinner tonight" into a real opening line instead
+    of speaking the raw instruction. The introduction (who is calling, and the
+    contact's name exactly as saved) is assembled here in code; the model only
+    writes the single sentence about the subject, and anything it adds that
+    wasn't in the subject - a number especially - is thrown away in favor of
+    quoting the subject plainly. Never raises."""
+    owner = telephony.OWNER_NICKNAME_TO_OTHERS
+    intro = (
+        f"Hi {contact_name}, this is Echo, {owner}'s AI assistant."
+        if contact_name
+        else f"Hello, this is Echo, {owner}'s AI assistant."
+    )
+    plain = f"{intro} I'm calling about {subject}."
+
+    prompt = (
+        f"{owner}'s AI assistant is phoning someone on his behalf. In ONE short spoken sentence, say why "
+        "you are calling, using only what is stated below. Refer to him as "
+        f"{owner}, never 'sir'. Do not address the person by any name. Do not add any noun, verb, time, "
+        "place or detail that is not stated below. Output only the sentence.\n"
+        f"Why the call is being made: {subject}\n"
+        "Examples:\n"
+        f"- dinner tonight at seven -> I'm calling about dinner tonight at seven.\n"
+        f"- sir will be ten minutes late -> {owner} asked me to let you know he'll be about ten minutes late.\n"
+        f"- whether the package arrived -> I'm calling to ask whether the package arrived."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                KNOWLEDGE_OLLAMA_URL,
+                json={
+                    "model": KNOWLEDGE_TEXT_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "keep_alive": -1,
+                },
+            )
+            resp.raise_for_status()
+            sentence = " ".join(resp.json()["message"]["content"].strip().strip('"').split())
+    except Exception as exc:  # noqa: BLE001 - a greeting is a nicety, never a reason not to place the call
+        print(f"[tools] couldn't compose a call greeting: {exc!r}", flush=True)
+        return plain
+
+    invented_number = any(d not in subject for d in re.findall(r"\d+", sentence))
+    # Words a model likes to add that change what the call means.
+    risky = {
+        "confirm", "confirming", "confirmation", "reservation", "appointment", "schedule", "scheduled",
+        "reschedule", "cancel", "cancelled", "remind", "reminder", "urgent", "emergency", "payment",
+        "order", "delivery", "meeting", "booking", "invite", "invitation",
+    }
+    sentence_words = set(re.findall(r"[a-z']+", sentence.lower()))
+    invented_word = bool(sentence_words & risky) and not (sentence_words & risky) <= set(
+        re.findall(r"[a-z']+", subject.lower())
+    )
+    if not sentence or len(sentence) > 220 or invented_number or invented_word or "sir" in sentence.lower().split():
+        return plain
+    return f"{intro} {sentence}"
+
+
 async def call_phone_number(name_or_number: str, message: str = "") -> str:
     cfg = telephony.load_config()
     if cfg is None:
@@ -555,8 +618,11 @@ async def call_phone_number(name_or_number: str, message: str = "") -> str:
         return f"I couldn't find '{name_or_number}' in the phone book, and it doesn't look like a valid phone number either."
 
     contact_name = name_or_number if number != name_or_number else ""
+    greeting = ""
+    if message.strip() and number != cfg.get("owner_number"):
+        greeting = await _compose_call_greeting(contact_name, message.strip())
     try:
-        await telephony.place_outbound_call(cfg, number, contact_name, message)
+        await telephony.place_outbound_call(cfg, number, contact_name, message, greeting)
     except httpx.TimeoutException:
         # The request may well have reached Telnyx and placed the call anyway -
         # a client-side timeout isn't proof the call itself failed, so don't
@@ -573,6 +639,8 @@ async def call_phone_number(name_or_number: str, message: str = "") -> str:
         print(f"[tools] call to {name_or_number} ({number}) failed: {exc!r}", flush=True)
         return f"The call to {name_or_number} genuinely failed to go through: {exc}"
     print(f"[tools] call to {name_or_number} ({number}) placed successfully", flush=True)
+    if greeting:
+        return f"Calling {name_or_number} now, sir. I'll open with: \"{greeting}\""
     return f"Calling {name_or_number} now, sir."
 
 

@@ -707,3 +707,116 @@ body.speaking .core::before {
   background: linear-gradient(90deg, var(--accent), var(--sand));
   transition: width 0.08s linear;
 }
+/* ---- compact toggle panel under the phone book ---- */
+.toggles-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toggle-filter {
+  width: 100%;
+  background: rgba(9, 12, 10, 0.7);
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  outline: none;
+}
+
+.toggle-filter:focus {
+  border-color: var(--accent);
+}
+
+.quick-toggles {
+  max-height: 208px;
+  overflow-y: auto;
+  padding: 4px 10px 6px;
+  border: 1px solid var(--accent-dim);
+  background: rgba(18, 22, 19, 0.55);
+}
+
+.quick-toggles .switch-row {
+  margin: 4px 0;
+  padding: 4px 0;
+  font-size: 0.82rem;
+}
+
+.quick-toggles .switch-row[hidden],
+.quick-toggles .location-cycle-btn[hidden] {
+  display: none;
+}
+
+.quick-toggles .vram-tag {
+  display: none;
+}
+
+.quick-toggles .tab-subheading {
+  margin: 8px 0 2px;
+  position: sticky;
+  top: 0;
+  background: rgba(18, 22, 19, 0.95);
+  padding: 2px 0;
+  z-index: 1;
+}
+
+.quick-toggles .location-cycle-btn {
+  width: 100%;
+  margin: 4px 0;
+  font-size: 0.72rem;
+  padding: 5px 6px;
+}
+
+/* ---- phone book: per-contact "can call Echo" toggle ---- */
+.phonebook-list li {
+  align-items: center;
+}
+
+.pb-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.switch-row.pb-access {
+  margin: 0;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.blocked-calls {
+  border: 1px solid rgba(201, 196, 180, 0.3);
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  color: var(--sand);
+}
+
+.blocked-calls[hidden] {
+  display: none;
+}
+
+.blocked-calls summary {
+  cursor: pointer;
+}
+
+.blocked-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--dim);
+}
+
+.blocked-list li {
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(138, 146, 140, 0.2);
+}
+
+/* tall content must scroll, not clip off the top of a vertically-centered body */
+body {
+  align-items: safe center;
+}

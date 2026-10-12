@@ -266,6 +266,7 @@ def main() -> None:
         pystray.MenuItem("Desk Guard", toggle_flag("desk_guard_enabled"), checked=flag_checked("desk_guard_enabled")),
         pystray.MenuItem("Calling", toggle_flag("calling_enabled"), checked=flag_checked("calling_enabled")),
         pystray.MenuItem("Call Notifications", toggle_flag("call_notifications_enabled"), checked=flag_checked("call_notifications_enabled")),
+        pystray.MenuItem("Sir Page", toggle_flag("sir_page_enabled"), checked=flag_checked("sir_page_enabled")),
         pystray.MenuItem(location_mode_label, cycle_location_mode),
         pystray.MenuItem("Browser Control", toggle_flag("browser_control_enabled"), checked=flag_checked("browser_control_enabled")),
         pystray.MenuItem("  -> allow pixel-control fallback", toggle_flag("browser_pixel_fallback_enabled"), checked=flag_checked("browser_pixel_fallback_enabled")),

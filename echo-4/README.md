@@ -4,6 +4,32 @@
 
 A local, standalone personal AI assistant. Hermes 3 (via Ollama) is the brain, Edge TTS gives it a British voice, and you can talk to it either through a browser dashboard or a native background listener that works with no browser open at all. It researches the web and remembers what it learns, remembers things about you across restarts, knows your location, looks at photos/video/your screen/your camera, places and receives real phone calls, and can act inside a browser tab through its own on-screen cursor when you ask it to. Optionally it guards your desk with face recognition. No cloud LLM, no subscription. Runs entirely on this machine.
 
+## What's new in echo-4
+
+**Name and look.** Renamed Jarvis -> Echo; neutral-gray-and-green dashboard; wake words "Echo" and the original "Jarvis" both work.
+
+**Open apps, Steam games, media keys, Spotify, shortcuts - each its own toggle** (Toggles panel, left column):
+
+| Toggle | Say | Needs |
+|---|---|---|
+| Open Apps | "open Notepad" | nothing - only apps Windows lists as installed |
+| Launch Steam Games | "launch Elden Ring" | Steam; Echo starts Steam and waits for sign-in first |
+| Media Keys | "next song", "volume up" | nothing |
+| Spotify Playback | "play my gym playlist", "play my liked songs", "skip to 1:30", "go back to the last song", "restart this song", "shuffle on" | Spotify Premium + the Spotify connection below |
+| Custom Shortcuts | "open Netflix"; "add a shortcut called Crunchyroll for crunchyroll.com" | nothing (edit `backend/plugins_data/app_shortcuts.json` by hand to point at a local program) |
+
+Echo checks that what it's about to use is actually running and starts it first (Spotify, Steam, ComfyUI, Ollama) instead of firing a command at nothing. Without the Spotify connection, pause/resume/next/previous still work through media keys.
+
+**Connecting Spotify** (one time): create a free app at developer.spotify.com/dashboard, add the redirect URI `http://127.0.0.1:8765/api/connections/spotify/callback`, then paste its Client ID and Client secret into Echo's Connections tab and press Connect.
+
+**Calls.** "Echo, call Austin about dinner tonight" opens with a greeting built from the subject ("Hi Austin, this is Echo ... I'm calling about dinner tonight"). Inbound callers are greeted by name. Each phone book contact has a **can call Echo** switch: contacts switched on are let in as guests (web lookups only, no access to your memory or computer, 10-minute cap); everyone else - including any number not saved - is turned away and listed under "Turned-away calls". Only your own number is treated as you.
+
+**Sir Page.** A toggle that phones you and says what happened: an unknown number was turned away, an allowed contact is on a call, or Desk Guard saw someone it didn't recognize and locked the computer. Limited to one call per event per 10 minutes and 6 an hour.
+
+**Dashboard.** All switches moved into a compact, filterable Toggles panel under the phone book.
+
+**3D generation** fixed for current ComfyUI (flattened dynamic-combo workflow inputs, 15-minute wait, real error messages, no duplicate runs) and defaulted to a lighter quality that keeps VRAM and run time down.
+
 ## System requirements & resource cost
 
 **VRAM usage (NVIDIA GPU):**
