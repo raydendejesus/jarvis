@@ -12,6 +12,7 @@ import asyncio
 import os
 import re
 import socket
+import time
 from difflib import SequenceMatcher
 
 import httpx
@@ -130,14 +131,14 @@ async def _all_playlists(client: httpx.AsyncClient, headers: dict) -> list[dict]
     return playlists
 
 
-async def _find_own_playlist(client: httpx.AsyncClient, headers: dict, query: str) -> tuple[str, str] | None:
+async def _find_own_playlist(client: httpx.AsyncClient, headers: dict, query: str) -> tuple[str, str, None] | None:
     best: tuple[float, str, str] | None = None
     for playlist in await _all_playlists(client, headers):
         score = _similar(query, playlist["name"])
         if best is None or score > best[0]:
             best = (score, playlist["uri"], playlist["name"])
     if best and best[0] >= OWN_PLAYLIST_THRESHOLD:
-        return best[1], best[2]
+        return best[1], best[2], None
     return None
 
 
@@ -176,20 +177,84 @@ async def _play_liked(client: httpx.AsyncClient, headers: dict, device: dict) ->
     return f"Spotify couldn't start your liked songs (error {resp.status_code})."
 
 
-async def _search(client: httpx.AsyncClient, headers: dict, query: str, kind: str) -> tuple[str, str] | None:
+_NOT_THE_ORIGINAL = (
+    "remix", "slowed", "sped up", "karaoke", "instrumental", "cover", "tribute", "8-bit", "8 bit",
+    "lullaby", "nightcore", "reverb", "live", "version",
+)
+
+
+def _pick_track(items: list[dict], query: str) -> dict:
+    """The best match for what was asked, preferring the original recording: remixes, covers
+    and so on only win if sir actually asked for one."""
+    wanted = query.lower()
+    best_score, best = -1.0, items[0]
+    for item in items:
+        artist = item["artists"][0]["name"] if item.get("artists") else ""
+        score = lu.score(query, f"{item['name']} {artist}")
+        name = item["name"].lower()
+        if any(word in name and word not in wanted for word in _NOT_THE_ORIGINAL):
+            score -= 0.25
+        score += (item.get("popularity") or 0) / 1000
+        if score > best_score:
+            best_score, best = score, item
+    return best
+
+
+async def _search(client: httpx.AsyncClient, headers: dict, query: str, kind: str) -> tuple[str, str, str | None] | None:
+    """(uri, spoken label, the track's album uri when it's a track)."""
     resp = await client.get(
-        f"{API}/search", headers=headers, params={"q": query, "type": kind, "limit": 5}
+        f"{API}/search", headers=headers, params={"q": query, "type": kind, "limit": 10 if kind == "track" else 5}
     )
     resp.raise_for_status()
     items = [i for i in resp.json().get(f"{kind}s", {}).get("items", []) if i]
     if not items:
         return None
-    item = items[0]
+    item = _pick_track(items, query) if kind == "track" else items[0]
     label = item["name"]
     artists = item.get("artists")
     if artists:
-        label += " - " + artists[0]["name"]
-    return item["uri"], label
+        label += " by " + artists[0]["name"]
+    album_uri = (item.get("album") or {}).get("uri") if kind == "track" else None
+    return item["uri"], label, album_uri
+
+
+async def _confirm_playing(client: httpx.AsyncClient, headers: dict, seconds: float = 5.0) -> bool:
+    """Spotify can accept a play command (HTTP 204) and then never start - so look."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        resp = await client.get(f"{API}/me/player", headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("is_playing") and data.get("item"):
+                return True
+        await asyncio.sleep(0.5)
+    return False
+
+
+async def _start_playback(
+    client: httpx.AsyncClient, headers: dict, device_id: str, kind: str, uri: str, album_uri: str | None
+) -> tuple[bool, int]:
+    """Starts playback and confirms it. For a single song the desktop player ignores a bare
+    track list, so the song is played inside its album (which it honors); the bare form is
+    the fallback. Returns (really playing, last HTTP status)."""
+    if kind == "track":
+        bodies = []
+        if album_uri:
+            bodies.append({"context_uri": album_uri, "offset": {"uri": uri}})
+        bodies.append({"uris": [uri]})
+    else:
+        bodies = [{"context_uri": uri}]
+    status = 0
+    for body in bodies:
+        resp = await client.put(
+            f"{API}/me/player/play", headers=headers, params={"device_id": device_id}, json=body
+        )
+        status = resp.status_code
+        if status not in (200, 202, 204):
+            return False, status
+        if await _confirm_playing(client, headers):
+            return True, status
+    return False, status
 
 
 async def spotify_play(args: dict) -> str:
@@ -246,23 +311,27 @@ async def spotify_play(args: dict) -> str:
             found = await _search(client, headers, query, kind)
         if found is None:
             return f"I couldn't find a {kind} matching '{query}' on Spotify."
-        uri, label = found
+        uri, label, album_uri = found
 
-        body = {"uris": [uri]} if kind == "track" else {"context_uri": uri}
-        resp = await client.put(
-            f"{API}/me/player/play", headers=headers, params={"device_id": device["id"]}, json=body
-        )
-        if resp.status_code in (200, 202, 204) and shuffle is not None:
+        started, status = await _start_playback(client, headers, device["id"], kind, uri, album_uri)
+        if started and shuffle is not None:
             await _set_shuffle(client, headers, device["id"], shuffle)
 
-    if resp.status_code in (200, 202, 204):
+    device_name = device.get("name", "Spotify")
+    if started:
         where = " from your playlists" if source == "your playlists" else ""
-        return f"Playing {label}{where} on {device.get('name', 'Spotify')}."
-    if resp.status_code == 403:
+        return f"Playing {label}{where} on {device_name}."
+    if status in (200, 202, 204):
+        return (
+            f"I asked Spotify to play {label} on {device_name} and it accepted the request, but it never started. "
+            "Try pressing play once in the Spotify app, or ask me again in a moment."
+        )
+    resp_status = status
+    if resp_status == 403:
         return "Spotify refused to start playback - this needs a Spotify Premium account."
-    if resp.status_code == 401:
+    if resp_status == 401:
         return "Spotify rejected the connection. Reconnect it from the Connections tab."
-    return f"Spotify couldn't start playback (error {resp.status_code})."
+    return f"Spotify couldn't start playback (error {resp_status})."
 
 
 _VK_PLAY_PAUSE, _VK_NEXT, _VK_PREVIOUS = 0xB3, 0xB0, 0xB1
