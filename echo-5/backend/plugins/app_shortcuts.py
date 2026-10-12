@@ -79,9 +79,13 @@ async def open_shortcut(args: dict) -> str:
         return f"I don't have a shortcut called '{name}'. Closest: {near}. I can add it if you give me the web address."
     best = ranked[0][1]
     target = best["target"]
+    blocked = lu.launch_blocked_reason("shortcut:" + target)
+    if blocked:
+        return f"{best['name']}: {blocked}."
     if not target.lower().startswith(("http://", "https://")) and not os.path.exists(target):
         return f"The shortcut '{best['name']}' points at {target}, which doesn't exist any more."
     os.startfile(target)
+    lu.note_launch("shortcut:" + target)
     return f"Opening {best['name']}."
 
 
@@ -172,8 +176,8 @@ SCHEMAS = [
 ]
 
 DISPATCH = {
-    "open_shortcut": open_shortcut,
-    "add_shortcut": add_shortcut,
-    "remove_shortcut": remove_shortcut,
-    "list_shortcuts": list_shortcuts,
+    "open_shortcut": lu.spoken(open_shortcut),
+    "add_shortcut": lu.spoken(add_shortcut),
+    "remove_shortcut": lu.spoken(remove_shortcut),
+    "list_shortcuts": lu.spoken(list_shortcuts),
 }

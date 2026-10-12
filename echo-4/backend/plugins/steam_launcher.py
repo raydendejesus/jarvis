@@ -97,6 +97,9 @@ async def launch_steam_game(args: dict) -> str:
         near = lu.suggestions(ranked) if ranked else "nothing close"
         return f"I couldn't find an installed Steam game called '{name}'. Closest: {near}."
     best = ranked[0][1]
+    blocked = lu.launch_blocked_reason("steam:" + best["appid"])
+    if blocked:
+        return f"{best['name']}: {blocked}."
 
     if not await _ensure_steam_running():
         return (
@@ -104,6 +107,7 @@ async def launch_steam_game(args: dict) -> str:
             f"so I haven't launched {best['name']}. It may be waiting on a login or an update."
         )
     os.startfile(f"steam://rungameid/{best['appid']}")
+    lu.note_launch("steam:" + best["appid"])
     return f"Launching {best['name']} through Steam."
 
 
@@ -125,4 +129,4 @@ SCHEMAS = [
     },
 ]
 
-DISPATCH = {"launch_steam_game": launch_steam_game}
+DISPATCH = {"launch_steam_game": lu.spoken(launch_steam_game)}

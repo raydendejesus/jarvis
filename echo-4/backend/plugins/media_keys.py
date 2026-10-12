@@ -6,6 +6,8 @@ with no account or setup.
 import asyncio
 import ctypes
 
+import launch_utils as lu
+
 PLUGIN_NAME = "media_keys"
 TOGGLE_LABEL = "Media Keys (play/pause, skip, volume)"
 CONFIG_KEY = "media_keys_enabled"
@@ -22,6 +24,15 @@ MEDIA_KEYS = {
     "volume_up": 0xAF,
 }
 _VOLUME_STEP_PERCENT = 2
+_SPOKEN = {
+    "play_pause": "Done - toggled play and pause.",
+    "next": "Skipping to the next track.",
+    "previous": "Back to the previous track.",
+    "stop": "Stopped.",
+    "mute": "Toggled mute.",
+    "volume_up": "Turned the volume up.",
+    "volume_down": "Turned the volume down.",
+}
 
 
 def _press(vk: int) -> None:
@@ -44,7 +55,7 @@ async def media_control(args: dict) -> str:
     for _ in range(presses):
         _press(MEDIA_KEYS[action])
         await asyncio.sleep(0.02)
-    return f"Sent {action.replace('_', ' ')}."
+    return _SPOKEN.get(action, "Done.")
 
 
 SCHEMAS = [
@@ -69,4 +80,4 @@ SCHEMAS = [
     },
 ]
 
-DISPATCH = {"media_control": media_control}
+DISPATCH = {"media_control": lu.spoken(media_control)}

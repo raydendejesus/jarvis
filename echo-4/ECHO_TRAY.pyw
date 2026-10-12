@@ -18,6 +18,17 @@ sys.path.insert(0, str(BACKEND_DIR))
 sys.stdout = open(PROJECT_DIR / "tray_out.log", "a", encoding="utf-8", buffering=1)
 sys.stderr = open(PROJECT_DIR / "tray_err.log", "a", encoding="utf-8", buffering=1)
 
+# Only one Echo may run. Every extra copy brings its own voice listener and its own Whisper
+# model: GPU memory fills up (the desktop starts to lag) and every spoken command gets
+# answered once per copy. A second launch just opens the dashboard of the one that is running.
+import ctypes
+
+_single_instance_handle = ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\EchoTraySingleInstance")
+if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+    print("[tray] Echo is already running - not starting a second copy.", flush=True)
+    webbrowser.open("http://127.0.0.1:8765")
+    sys.exit(0)
+
 import httpx
 import pystray
 from PIL import Image, ImageDraw

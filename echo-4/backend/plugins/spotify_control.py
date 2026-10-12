@@ -32,8 +32,8 @@ OWN_PLAYLIST_THRESHOLD = 0.75
 _LIKED_RE = re.compile(r"\b(liked|saved|favou?rite)\b.*\b(songs?|tracks?|music)\b|^liked$|\bmy likes\b", re.I)
 _GENERIC_PLAYLIST_RE = re.compile(r"^(my|a|the|some|any)?\s*(own\s+)?playlists?$", re.I)
 NOT_CONNECTED = (
-    "Spotify isn't connected yet. Open the Connections tab on the dashboard and connect Spotify "
-    "(it needs a free Spotify developer app - the steps are shown there)."
+    "Spotify isn't connected to me yet, so I can't do that. Sir needs to connect it once in the Connections tab "
+    "on the dashboard - the setup steps are right there - and then I can play songs, playlists and liked songs."
 )
 
 
@@ -208,7 +208,11 @@ async def spotify_play(args: dict) -> str:
     except _NotConnected:
         search_for = query or "liked songs"
         await asyncio.to_thread(_open_spotify_uri, "spotify:search:" + search_for.replace(" ", "%20"))
-        return f"{NOT_CONNECTED} For now I opened a Spotify search for '{search_for}' so you can press play."
+        return (
+            f"I've opened a Spotify search for {search_for}, but I can't start it myself yet because Spotify isn't "
+            "connected to me. Sir needs to connect it once in the Connections tab on the dashboard - the setup steps are "
+            "right there - and then I can play songs, playlists and liked songs."
+        )
 
     if not await _ensure_spotify_running():
         return "Spotify isn't running and didn't start - I couldn't open it."
@@ -292,8 +296,8 @@ async def _media_key_fallback(action: str) -> str:
     start it instead."""
     if action not in ("pause", "resume", "next", "previous"):
         return (
-            "Skipping to a time, restarting, shuffle, repeat and volume need Spotify connected - "
-            + NOT_CONNECTED
+            "Skipping to a time, restarting, shuffle, repeat and volume need Spotify connected to me, and it isn't yet. "
+            "Sir can connect it once in the Connections tab on the dashboard."
         )
     if action == "next":
         _press_media_key(_VK_NEXT)
@@ -527,8 +531,8 @@ SCHEMAS = [
 ]
 
 DISPATCH = {
-    "spotify_play": spotify_play,
-    "spotify_my_playlists": spotify_my_playlists,
-    "spotify_playback": spotify_playback,
-    "spotify_now_playing": spotify_now_playing,
+    "spotify_play": lu.spoken(spotify_play),
+    "spotify_my_playlists": lu.spoken(spotify_my_playlists),
+    "spotify_playback": lu.spoken(spotify_playback),
+    "spotify_now_playing": lu.spoken(spotify_now_playing),
 }

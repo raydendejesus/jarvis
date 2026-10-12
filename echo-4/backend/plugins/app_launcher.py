@@ -67,8 +67,12 @@ async def open_app(args: dict) -> str:
             "streaming service, try open_shortcut instead."
         )
     best = ranked[0][1]
+    blocked = lu.launch_blocked_reason(best["app_id"])
+    if blocked:
+        return lu.say(f"{best['name']}: {blocked}.")
     subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{best['app_id']}"], creationflags=lu.CREATE_NO_WINDOW)
-    return f"Opening {best['name']}."
+    lu.note_launch(best["app_id"])
+    return lu.say(f"Opening {best['name']}.")
 
 
 SCHEMAS = [

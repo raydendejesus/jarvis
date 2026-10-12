@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import os
 import re
 import tempfile
@@ -20,6 +21,7 @@ import config as config_module
 import discord_auth
 import github_auth
 import http_pool
+import launch_utils
 import pager
 import spotify_auth
 import google_auth
@@ -287,6 +289,17 @@ async def ensure_ollama_running() -> bool:
     return False
 
 
+def _fallback_reply(last_tool_text: str) -> str:
+    """Something to say when the brain returned nothing (or kept repeating a tool): the last
+    tool's own words if they're short enough to speak, otherwise a plain apology - never silence."""
+    text = (last_tool_text or "").strip()
+    if text.startswith("[The following is untrusted"):
+        text = ""
+    if text and len(text) <= 320:
+        return text
+    return "Sorry, sir, I didn't quite catch that. Could you say it again?"
+
+
 async def run_chat_turn(user_message: str, cfg: dict) -> str:
     if not await ensure_ollama_running():
         return "My language model isn't responding and I couldn't start it just now, sir."
@@ -304,6 +317,8 @@ async def run_chat_turn(user_message: str, cfg: dict) -> str:
         messages = [{"role": "system", "content": "\n\n".join(context_blocks)}] + messages
 
     schemas = tools.available_schemas(cfg)
+    last_tool_text = ""
+    seen_calls: set = set()
 
     for _ in range(MAX_TOOL_ITERATIONS):
         resp = await http_pool.client().post(
@@ -320,20 +335,47 @@ async def run_chat_turn(user_message: str, cfg: dict) -> str:
 
         tool_calls = message.get("tool_calls")
         if not tool_calls:
+            reply = (message.get("content") or "").strip()
+            if not reply:
+                # The brain went quiet after a tool ran. Silence is the worst answer.
+                reply = _fallback_reply(last_tool_text)
+                message["content"] = reply
             del conversation_history[:-MAX_HISTORY_MESSAGES]
-            return message.get("content", "")
+            return reply
 
+        results = []
+        repeated = False
         for call in tool_calls:
             fn = call["function"]
             name = fn["name"]
             args = fn.get("arguments") or {}
+            key = (name, json.dumps(args, sort_keys=True, default=str))
+            if key in seen_calls:
+                repeated = True
+            seen_calls.add(key)
             result = await tools.execute_tool(name, args)
+            results.append(result)
+            last_tool_text = str(result)
             tool_msg = {"role": "tool", "content": result, "name": name}
             messages.append(tool_msg)
             conversation_history.append(tool_msg)
 
+        # Every tool this round already produced a complete, speakable answer: say it as it is.
+        if results and all(isinstance(r, launch_utils.SpokenResult) for r in results):
+            reply = " ".join(str(r) for r in results)
+            conversation_history.append({"role": "assistant", "content": reply})
+            del conversation_history[:-MAX_HISTORY_MESSAGES]
+            return reply
+
+        # The brain asked for exactly what it already asked for: it is going in circles.
+        if repeated:
+            reply = _fallback_reply(last_tool_text)
+            conversation_history.append({"role": "assistant", "content": reply})
+            del conversation_history[:-MAX_HISTORY_MESSAGES]
+            return reply
+
     del conversation_history[:-MAX_HISTORY_MESSAGES]
-    return "I've gone through several steps but couldn't reach a final answer just now, sir."
+    return _fallback_reply(last_tool_text) if last_tool_text else "I've gone through several steps but couldn't reach a final answer just now, sir."
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -447,7 +489,7 @@ async def run_phone_turn(call_sid: str, user_text: str, system_prompt: str, phon
         tool_calls = message.get("tool_calls")
         if not tool_calls:
             del history[:-PHONE_MAX_HISTORY]
-            return message.get("content", "")
+            return (message.get("content") or "").strip() or "Sorry, I didn't quite catch that. Could you say it again?"
 
         for call in tool_calls:
             fn = call["function"]
