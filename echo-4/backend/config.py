@@ -14,6 +14,7 @@ DEFAULTS = {
     "calling_enabled": False,
     "call_notifications_enabled": False,
     "sir_page_enabled": False,
+    "ollama_parallel_2_enabled": False,
     "location_mode": "off",
     "browser_control_enabled": False,
     "browser_pixel_fallback_enabled": False,

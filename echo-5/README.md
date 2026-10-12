@@ -1,15 +1,15 @@
-# Echo - echo-cleaned5
+# Echo-5 (cleaned up)
 
-> **echo-cleaned5 is echo-4 made lighter.** Nothing was removed, nothing was added and nothing was changed:
+> **Echo-5 is echo-4, cleaned up and made lighter.** Nothing was removed, nothing was added and nothing was changed:
 > same brain model (`hermes3`), same Whisper size, same toggles, same behavior. It simply loads less,
 > re-reads less and wastes less - the right pick for a smaller or older machine. Everything below the
 > line is the unchanged echo-4 documentation.
 
 ## What was compressed or smushed
 
-All numbers were measured on this project's own machine, fresh process each time, echo-4 vs echo-cleaned5.
+All numbers were measured on this project's own machine, fresh process each time, echo-4 vs echo-5.
 
-| What | echo-4 | echo-cleaned5 | Measured effect |
+| What | echo-4 | echo-5 | Measured effect |
 |---|---|---|---|
 | **Heavy libraries load on first use** - OpenCV, mss, BeautifulSoup, ddgs and NumPy (in Desk Guard) were all imported at startup even when screen, camera, Desk Guard and web search were off | loaded at start | loaded the first time a tool needs them | Server process load **55 MB -> 37 MB** and ~20% faster to start; running server working set **84 MB -> 64 MB (-23%)**. `tools` module 38 -> 16 MB, Desk Guard module 31 -> 16 MB |
 | `config.json` was re-read and re-parsed on every call (the listener asks about ten times a second) | every call | only when the file changes | 170 -> 79 microseconds per call |
@@ -30,6 +30,7 @@ All numbers were measured on this project's own machine, fresh process each time
 ### Deliberately left alone
 
 - **The brain model and Whisper size** - unchanged, as asked. They are the real footprint (`hermes3` 8B, about 5-6 GB of VRAM; Whisper `medium.en`, about 1.5 GB).
+- **Two replies at once** (the Ollama setting) is available but **off by default** here, since it costs about 1 GB of VRAM; it is a single switch in the Toggles panel.
 - **Whisper (`medium.en`, ~1.5 GB VRAM)** stays loaded - it is the always-on listener, and unloading it would make the wake word lag.
 - Generated 3D models accumulate on disk (roughly 15-60 MB each); delete old ones in `backend/plugins_data/generated_3d_models/` if space is tight.
 
@@ -68,6 +69,8 @@ Echo checks that what it's about to use is actually running and starts it first 
 **Calls.** "Echo, call Austin about dinner tonight" opens with a greeting built from the subject ("Hi Austin, this is Echo ... I'm calling about dinner tonight"). Inbound callers are greeted by name. Each phone book contact has a **can call Echo** switch: contacts switched on are let in as guests (web lookups only, no access to your memory or computer; no limit on how often or how long they call); everyone else - including any number not saved - is turned away and listed under "Turned-away calls". Only your own number is treated as you.
 
 **Fast phone replies.** Everything slow now happens before the phone rings: the brain is loaded and the opening line is rendered to audio before Echo dials, so the callee hears the hello the instant they answer and there is no cold start on the first reply. Fixed phrases ("didn't catch that", inbound hellos for each allowed contact) are rendered ahead of time and cached. The brain and voice engine now share one connection (`127.0.0.1`, not `localhost`) instead of opening a new one per request. Measured on the same machine: hello 0.6 s -> instant; reply turns 1.8 s median (6.2 s worst) -> 0.7 s (0.9 s worst). If a caller hangs up while Echo is still working out a reply, it stops at once instead of finishing for nobody, so the next caller never waits behind a dead call. Every reply is also bounded (a phone reply stops at about 220 tokens, trimmed to a whole sentence; a phone turn gives up after 30 s and apologises), because the brain handles one request at a time and a reply that never ended used to hold everyone - the next caller and your own voice command - in line behind it for up to two minutes.
+
+**Two replies at once.** A switch in the Toggles panel. Ollama normally works on one request at a time, so a call's reply holds up the next caller and your own voice commands. On, it works on two at once - measured here: your voice command during a call's long reply waits 0.5 s instead of 2.1 s, and a second caller 0.7-1.2 s instead of 2.3 s - for about 1 GB more VRAM, and the long reply itself runs a little slower while both are active. Switching it restarts Ollama (about 15 seconds), is refused while a phone call is in progress, and the setting is kept for the next time Ollama starts. Off by default.
 
 **Sir Page.** A toggle that phones you and says what happened: an unknown number was turned away, an allowed contact is on a call, or Desk Guard saw someone it didn't recognize and locked the computer. It only limits how often Echo rings you - never anyone calling Echo: the same event isn't repeated within 10 minutes, unknown-number alerts are held to 6 an hour (extras are mentioned on your next call), and Desk Guard alerts are never held back.
 

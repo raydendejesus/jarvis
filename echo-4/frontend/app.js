@@ -325,7 +325,7 @@ function initRecognition() {
   }
 }
 
-const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "sir_page_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled", "vr_mode_enabled"];
+const TOGGLE_KEYS = ["ai_enabled", "screen_access", "camera_access", "desk_guard_enabled", "calling_enabled", "call_notifications_enabled", "sir_page_enabled", "ollama_parallel_2_enabled", "browser_control_enabled", "browser_pixel_fallback_enabled", "code_canvas_enabled", "vr_mode_enabled"];
 
 function setIndicator(key, active) {
   const el = document.getElementById(`ind-${key}`);
@@ -428,6 +428,7 @@ async function updateSetting(key, value) {
       throw new Error(data.detail || `Server error ${resp.status}`);
     }
     setIndicator(key, value);
+    if (key === "ollama_parallel_2_enabled") watchOllamaRestart();
     if (key === "code_canvas_enabled") {
       if (value) loadCanvasOnStartup();
       else {
@@ -443,7 +444,38 @@ async function updateSetting(key, value) {
   }
 }
 
+const OLLAMA_PARALLEL_LABEL = { 1: "one request at a time", 2: "two requests at once" };
+
+async function refreshOllamaStatus() {
+  const el = document.getElementById("ollamaStatus");
+  if (!el) return null;
+  try {
+    const status = await (await fetch("/api/ollama/status")).json();
+    if (status.restarting) {
+      el.textContent = `Restarting Ollama (${OLLAMA_PARALLEL_LABEL[status.wanted]}) - about 20 seconds; replies pause until it's back.`;
+    } else if (status.error) {
+      el.textContent = `Ollama: ${status.error}`;
+    } else if (status.slots && status.slots !== status.wanted) {
+      el.textContent = `Ollama is running ${OLLAMA_PARALLEL_LABEL[status.slots] || status.slots + " at once"}, but the switch is set to ${OLLAMA_PARALLEL_LABEL[status.wanted]}. Turn it off and on again to apply.`;
+    } else if (status.slots) {
+      el.textContent = `Ollama is running ${OLLAMA_PARALLEL_LABEL[status.slots] || status.slots + " at once"}.`;
+    }
+    return status;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function watchOllamaRestart() {
+  for (let i = 0; i < 90; i++) {
+    const status = await refreshOllamaStatus();
+    if (status && !status.restarting && i > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+}
+
 function initSettingsPanel() {
+  refreshOllamaStatus();
   loadSettings().then(() => maybeShareLocation());
   for (const key of TOGGLE_KEYS) {
     const el = document.getElementById(`toggle-${key}`);

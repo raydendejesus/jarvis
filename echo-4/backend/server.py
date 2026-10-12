@@ -27,6 +27,7 @@ import location
 import memory
 import model3d_state
 import notion_auth
+import ollama_control
 import phonebook
 import plugin_loader
 import security
@@ -150,6 +151,7 @@ class SettingsUpdate(BaseModel):
     calling_enabled: bool | None = None
     call_notifications_enabled: bool | None = None
     sir_page_enabled: bool | None = None
+    ollama_parallel_2_enabled: bool | None = None
     location_mode: str | None = None
     browser_control_enabled: bool | None = None
     browser_pixel_fallback_enabled: bool | None = None
@@ -273,7 +275,7 @@ async def ensure_ollama_running() -> bool:
         return True
     print("[ollama] not responding - starting it", flush=True)
     try:
-        subprocess.Popen(["ollama", "serve"], creationflags=0x08000000)
+        subprocess.Popen(["ollama", "serve"], env=ollama_control.spawn_env(config_module.load_config()), creationflags=0x08000000)
     except OSError as exc:
         print(f"[ollama] couldn't start it: {exc}", flush=True)
         return False
@@ -923,6 +925,29 @@ async def get_settings() -> dict:
     return config_module.load_config()
 
 
+def _phone_call_active() -> bool:
+    """True while a call is being worked on or was spoken to within the last 45 seconds."""
+    if any(telephony.inflight_work.values()):
+        return True
+    now = time.time()
+    return any(
+        now - last < 45
+        for sid, last in telephony.call_last_response_at.items()
+        if not telephony.call_has_ended(sid)
+    )
+
+
+@app.get("/api/ollama/status")
+async def get_ollama_status() -> dict:
+    cfg = config_module.load_config()
+    return {
+        "restarting": ollama_control.status["restarting"],
+        "error": ollama_control.status["error"],
+        "slots": await asyncio.to_thread(ollama_control.current_slots),
+        "wanted": ollama_control.SLOTS_WHEN_ON if cfg.get("ollama_parallel_2_enabled") else 1,
+    }
+
+
 ACCESS_KEYS_AFFECTING_HISTORY = ("screen_access", "camera_access", "calling_enabled", "browser_control_enabled", "code_canvas_enabled")
 VALID_LOCATION_MODES = {"off", "pc", "phone"}
 
@@ -941,11 +966,31 @@ async def set_settings(update: SettingsUpdate) -> dict:
     if changes.get("browser_pixel_fallback_enabled") and not cfg.get("browser_control_enabled") and not changes.get("browser_control_enabled"):
         raise HTTPException(status_code=400, detail="Turn on browser control before enabling its pixel fallback.")
 
+    restart_ollama_with = None
+    if "ollama_parallel_2_enabled" in changes:
+        wanted = ollama_control.SLOTS_WHEN_ON if changes["ollama_parallel_2_enabled"] else 1
+        if wanted != ollama_control.current_slots():
+            if ollama_control.status["restarting"]:
+                raise HTTPException(status_code=409, detail="Ollama is already restarting - wait for it to finish.")
+            if _phone_call_active():
+                raise HTTPException(
+                    status_code=409,
+                    detail="A phone call is in progress - restarting Ollama now would cut it off. Try again when it ends.",
+                )
+            restart_ollama_with = wanted
+
     access_changed = any(cfg.get(k) != changes[k] for k in ACCESS_KEYS_AFFECTING_HISTORY if k in changes)
     turning_off = changes.get("ai_enabled") is False and cfg.get("ai_enabled") is not False
 
     cfg.update(changes)
+    if "ollama_parallel_2_enabled" in changes:
+        cfg["ollama_parallel_previous"] = ollama_control.persist_user_env(
+            bool(changes["ollama_parallel_2_enabled"]), cfg.get("ollama_parallel_previous")
+        )
     config_module.save_config(cfg)
+
+    if restart_ollama_with is not None:
+        asyncio.create_task(ollama_control.restart(restart_ollama_with, cfg, warm_model))
 
     if access_changed:
         # Old turns discussing "access is off" would otherwise bias the model into

@@ -20,7 +20,7 @@ Everything from 00-2, plus the ability to act inside your browser: a Chrome exte
 
 The project is renamed from **Jarvis** to **Echo** - this is the Echo-4 edition of the Jarvis series. Everything from 00-3, with a neutral-and-green dashboard, "Echo" as the wake word ("Jarvis" still works), opening apps / Steam games / Spotify / shortcuts by voice, per-contact call permissions, greetings built from the call's subject, a "Sir Page" toggle that phones you when something happens, and a compact toggle panel. Launcher files are `ECHO.bat` / `ECHO_TRAY.pyw` and the persona model is `echo`.
 
-## [`echo-cleaned5/`](echo-cleaned5/) - the same Echo, leaner
+## [`echo-5/`](echo-5/) - Echo-5, cleaned up
 
 echo-4 with nothing removed, added or changed - same model, same toggles, same behavior - but loading less and re-reading less so it runs on a smaller machine: the server process loads in about 37 MB instead of 55 MB and uses about 23% less resident memory, and the launcher, dashboard and phone state do less wasted work. See its README for the full list of what was compressed.
 
