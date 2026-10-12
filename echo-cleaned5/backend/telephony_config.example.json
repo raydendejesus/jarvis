@@ -1,0 +1,9 @@
+{
+  "provider": "telnyx",
+  "api_key": "PASTE_YOUR_TELNYX_API_KEY_HERE",
+  "telnyx_number": "+1XXXXXXXXXX",
+  "public_base_url": "PASTE_YOUR_NGROK_HTTPS_URL_HERE",
+  "account_sid": "PASTE_YOUR_TELNYX_ACCOUNT_SID_HERE",
+  "application_sid": "PASTE_YOUR_TEXML_APPLICATION_ID_HERE",
+  "owner_number": "+1YOUROWNNUMBERHERE"
+}

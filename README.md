@@ -2,7 +2,7 @@
 
 A local, self-hosted AI assistant - a real LLM as the brain (running on your own GPU via Ollama), a natural voice, wake-word listening, memory, and increasingly, real-world capability, all without a cloud AI subscription.
 
-This repo holds four successive versions of the project side by side, each in its own folder, so the progression is visible rather than hidden behind force-pushed history. Each version is a complete, independently-runnable copy with its own README - pick the one you actually want to run (almost certainly the newest), or read through all four to see how it evolved.
+This repo holds five successive versions of the project side by side, each in its own folder, so the progression is visible rather than hidden behind force-pushed history. Each version is a complete, independently-runnable copy with its own README - pick the one you actually want to run (almost certainly the newest), or read through all five to see how it evolved.
 
 ## [`00-1/`](00-1/) - the original
 
@@ -20,10 +20,14 @@ Everything from 00-2, plus the ability to act inside your browser: a Chrome exte
 
 The project is renamed from **Jarvis** to **Echo** - this is the Echo-4 edition of the Jarvis series. Everything from 00-3, with a neutral-and-green dashboard, "Echo" as the wake word ("Jarvis" still works), opening apps / Steam games / Spotify / shortcuts by voice, per-contact call permissions, greetings built from the call's subject, a "Sir Page" toggle that phones you when something happens, and a compact toggle panel. Launcher files are `ECHO.bat` / `ECHO_TRAY.pyw` and the persona model is `echo`.
 
+## [`echo-cleaned5/`](echo-cleaned5/) - the same Echo, leaner
+
+echo-4 with nothing removed, added or changed - same model, same toggles, same behavior - but loading less and re-reading less so it runs on a smaller machine: the server process loads in about 37 MB instead of 55 MB and uses about 23% less resident memory, and the launcher, dashboard and phone state do less wasted work. See its README for the full list of what was compressed.
+
 ## Which one should I run?
 
 `echo-4`, unless you have a specific reason to want an earlier version's exact behavior. Each version's own README has full setup instructions - go to [`echo-4/README.md`](echo-4/README.md) and start there.
 
 ## License
 
-All four versions share the same license - see [`00-3/LICENSE.md`](00-3/LICENSE.md) (00-1 uses no formal license file; treat 00-2 and 00-3's terms as the project's intent throughout). In short: free to use, modify, and share forever; it may never be sold by anyone; and if it's used as the foundation of another project, or makes up 51% or more of one, that project is bound by the same no-selling rule too.
+All five versions share the same license - see [`00-3/LICENSE.md`](00-3/LICENSE.md) (00-1 uses no formal license file; treat 00-2 and 00-3's terms as the project's intent throughout). In short: free to use, modify, and share forever; it may never be sold by anyone; and if it's used as the foundation of another project, or makes up 51% or more of one, that project is bound by the same no-selling rule too.
